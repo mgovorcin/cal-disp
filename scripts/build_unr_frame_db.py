@@ -22,6 +22,7 @@ Examples
 # reusing an existing parquet (no rebuild / network)
     python build_unr_frame_db.py --from-parquet ../configs/data/opera_disp_s1_frame_unr_points_20260604.parquet \
         --frame-id 831 --plate IGS20 --html-map
+
 """
 
 from __future__ import annotations
@@ -130,7 +131,9 @@ def make_html_map(
 
     if frame_id is not None:
         if frame_id not in opera_gdf.index:
-            raise SystemExit(f"frame_id {frame_id} not found among North-America frames")
+            raise SystemExit(
+                f"frame_id {frame_id} not found among North-America frames"
+            )
         frame = opera_gdf.loc[[frame_id], ["geometry", "unr_grid_count"]]
         m = frame.explore(
             color="red",
@@ -163,7 +166,7 @@ def make_html_map(
     return out_path
 
 
-STANDALONE_TEMPLATE = r'''<!DOCTYPE html>
+STANDALONE_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -361,11 +364,12 @@ document.addEventListener('keydown',e=>{ if(e.target.id==='search-box') return;
 <!-- generated __GENERATED__ -->
 </body>
 </html>
-'''
+"""
 
 
 def _round_geom(geom, ndigits: int = 5) -> dict:
     """GeoJSON mapping of a geometry with coordinates rounded to shrink the file."""
+
     def rnd(c):
         if isinstance(c, (list, tuple)):
             if c and isinstance(c[0], (int, float)):
@@ -419,7 +423,9 @@ def write_standalone_html(
         for i, lon, lat in sub.itertuples():
             points[int(i)] = [round(float(lon), 5), round(float(lat), 5)]
 
-    data = json.dumps({"type": "FeatureCollection", "features": feats}, separators=(",", ":"))
+    data = json.dumps(
+        {"type": "FeatureCollection", "features": feats}, separators=(",", ":")
+    )
     data = data.replace("</", "<\\/")  # keep the </script> tag safe
 
     html = (
@@ -428,7 +434,9 @@ def write_standalone_html(
         .replace("__GRID_BASE__", grid_base)
         .replace("__PLATES__", json.dumps(list(PLATES)))
         .replace("__VERSION__", version)
-        .replace("__GENERATED__", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
+        .replace(
+            "__GENERATED__", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        )
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html)
@@ -436,6 +444,7 @@ def write_standalone_html(
 
 
 def main() -> None:
+    """Parse CLI arguments and build/report/visualize the frame database."""
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -451,12 +460,21 @@ def main() -> None:
         default=Path.cwd(),
         help="Scratch dir for the downloaded UNR lookup table.",
     )
-    p.add_argument("--version", default="0.3", help="UNR gridded data version (default: 0.3).")
-    p.add_argument("--margin-deg", type=float, default=0.5, help="Frame buffer in degrees (default: 0.5).")
+    p.add_argument(
+        "--version", default="0.3", help="UNR gridded data version (default: 0.3)."
+    )
+    p.add_argument(
+        "--margin-deg",
+        type=float,
+        default=0.5,
+        help="Frame buffer in degrees (default: 0.5).",
+    )
     p.add_argument(
         "--prod-date",
         default=datetime.now(timezone.utc).strftime("%Y%m%d"),
-        help="Production date stamped into the filename (YYYYMMDD; default: today UTC).",
+        help=(
+            "Production date stamped into the filename (YYYYMMDD; default: today UTC)."
+        ),
     )
 
     # Inspection / visualization (all optional)
@@ -464,13 +482,18 @@ def main() -> None:
         "--from-parquet",
         type=Path,
         default=None,
-        help="Load an existing parquet instead of rebuilding (fast for inspection/maps).",
+        help=(
+            "Load an existing parquet instead of rebuilding (fast for inspection/maps)."
+        ),
     )
     p.add_argument(
         "--frame-id",
         type=int,
         default=None,
-        help="Report UNR grid ids + URLs for this frame_id (and focus the HTML map on it).",
+        help=(
+            "Report UNR grid ids + URLs for this frame_id (and focus the HTML map on"
+            " it)."
+        ),
     )
     p.add_argument(
         "--plate",
@@ -492,7 +515,10 @@ def main() -> None:
     p.add_argument(
         "--standalone-html",
         action="store_true",
-        help="Write a self-contained interactive viewer (data embedded; no server needed).",
+        help=(
+            "Write a self-contained interactive viewer (data embedded; no server"
+            " needed)."
+        ),
     )
     p.add_argument(
         "--standalone-out",
@@ -509,10 +535,15 @@ def main() -> None:
         print(f"Loading existing DB: {args.from_parquet}")
         opera_gdf = gpd.read_parquet(args.from_parquet)
     else:
-        print(f"Building UNR frame DB (version={args.version}, margin={args.margin_deg} deg) ...")
+        print(
+            f"Building UNR frame DB (version={args.version}, margin={args.margin_deg}"
+            " deg) ..."
+        )
         opera_gdf = build_database(args.work_dir, args.version, args.margin_deg)
         args.outdir.mkdir(parents=True, exist_ok=True)
-        out_path = args.outdir / f"opera_disp_s1_frame_unr_points_{args.prod_date}.parquet"
+        out_path = (
+            args.outdir / f"opera_disp_s1_frame_unr_points_{args.prod_date}.parquet"
+        )
         opera_gdf.to_parquet(out_path)
         print(f"Wrote {len(opera_gdf)} frames -> {out_path}")
         print(opera_gdf["unr_grid_count"].describe().to_string())
@@ -532,11 +563,19 @@ def main() -> None:
                 else f"opera_disp_s1_frame_unr_points_{args.prod_date}"
             )
             suffix = f"_frame{args.frame_id}" if args.frame_id is not None else "_map"
-            map_dir = args.from_parquet.parent if args.from_parquet is not None else args.outdir
+            map_dir = (
+                args.from_parquet.parent
+                if args.from_parquet is not None
+                else args.outdir
+            )
             map_path = map_dir / f"{base}{suffix}.html"
 
         # Grid point geometries are only needed to plot a selected frame's points.
-        grid_gdf = load_grid_gdf(args.work_dir, args.version) if args.frame_id is not None else None
+        grid_gdf = (
+            load_grid_gdf(args.work_dir, args.version)
+            if args.frame_id is not None
+            else None
+        )
         make_html_map(opera_gdf, map_path, frame_id=args.frame_id, grid_gdf=grid_gdf)
         print(f"Wrote HTML map -> {map_path}")
 
@@ -550,7 +589,11 @@ def main() -> None:
                 if args.from_parquet is not None
                 else f"opera_disp_s1_frame_unr_points_{args.prod_date}"
             )
-            sa_dir = args.from_parquet.parent if args.from_parquet is not None else args.outdir
+            sa_dir = (
+                args.from_parquet.parent
+                if args.from_parquet is not None
+                else args.outdir
+            )
             sa_path = sa_dir / f"{base}_viewer.html"
         grid_base = GRID_BASE_URL.format(version=args.version)
         # Grid point lon/lat are needed to draw the selected frame's points.
