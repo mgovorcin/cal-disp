@@ -5,8 +5,10 @@ Orchestrates GNSS-based calibration using Venti as the processing back-end:
 1. Load the DISP product and extract spatial metadata.
 2. Set up a ``GNSSReference`` pointing at pre-staged UNR tenv8 files.
 3. Load the 3-band LOS (east / north / up) GeoTIFF.
-4. Compute the GNSS LOS reference (velocity or epoch-displacement).
-5. Fit a calibration surface with ``SpatialProcessor.fit_windowed_surface``.
+4. Compute the GNSS LOS reference (constant rates or epoch displacement).
+5. Estimate the calibration surface with ``venti.estimate_calibration_surface``
+   (tropospheric and solid Earth tide corrections removed before the fit and
+   added back, reference pixel, event masks, windowed fit).
 6. Package the result into a ``CalProduct`` NetCDF.
 """
 
@@ -132,6 +134,56 @@ def _staged_station_files(
 ) -> list[Path]:
     """Pre-staged UNR station files of one reference frame and grid type."""
     return sorted(unr_timeseries_dir.glob(f"*_{reference_frame}_{grid_type}.tenv8"))
+
+
+def _find_reference_point(
+    ds_disp: xr.Dataset, mask: np.ndarray, work_dir: Path
+) -> tuple[int, int]:
+    """Choose the reference pixel ``(row, col)`` for one product.
+
+    Venti's rule (``opera_utils.disp.rebase_reference.find_reference_point``:
+    the pixel nearest the centre of the highest-quality pixels) applied to
+    this product's temporal coherence, restricted to valid pixels. The fit is
+    nearly shift-invariant, so the choice mostly guarantees a valid pixel.
+    """
+    from opera_utils.disp import rebase_reference
+
+    if "temporal_coherence" in ds_disp:
+        quality = ds_disp.temporal_coherence.values.astype(np.float32)
+    else:
+        quality = np.ones(mask.shape, dtype=np.float32)
+    quality = np.where(mask & np.isfinite(quality), quality, 0.0).astype(np.float32)
+
+    x, y = ds_disp.x.values, ds_disp.y.values
+    dx, dy = float(x[1] - x[0]), float(y[1] - y[0])
+    crs_wkt = (
+        ds_disp["spatial_ref"].attrs.get("crs_wkt")
+        if "spatial_ref" in ds_disp
+        else None
+    )
+    quality_file = work_dir / "reference_quality.tif"
+    with rasterio.open(
+        quality_file,
+        "w",
+        driver="GTiff",
+        height=quality.shape[0],
+        width=quality.shape[1],
+        count=1,
+        dtype="float32",
+        crs=crs_wkt,
+        transform=rasterio.transform.from_origin(
+            float(x[0]) - dx / 2, float(y[0]) - dy / 2, dx, -dy
+        ),
+    ) as dst:
+        dst.write(quality, 1)
+    try:
+        row, col = rebase_reference.find_reference_point(quality_file)
+    except ValueError:
+        # No pixel above the minimum quality: take the best valid one
+        row, col = np.unravel_index(np.argmax(quality), quality.shape)
+    ref_point = (int(row), int(col))
+    logger.info("Reference pixel (row, col): %s", ref_point)
+    return ref_point
 
 
 def _setup_gnss_reference(
@@ -267,7 +319,7 @@ def run_calibration(
     n_workers : int
         Dask workers — reserved for future parallelisation.
     threads_per_worker : int
-        Threads per Dask worker, forwarded to ``SpatialProcessor`` ``n_jobs``.
+        Threads per Dask worker, forwarded to the windowed fit as ``n_jobs``.
     work_directory : Path, optional
         Scratch directory for intermediate files and GNSS cache.
     pge_runconfig : str, optional
@@ -314,8 +366,6 @@ def run_calibration(
         Path to the output ``CalProduct`` NetCDF file.
 
     """
-    from venti.spatial import SpatialProcessor, downsample_array, upsample_array
-
     if los_file is None:
         raise ValueError("los_file is required for calibration")
 
@@ -386,32 +436,31 @@ def run_calibration(
     logger.info("Loading LOS unit vectors: %s", los_file.name)
     los_east, los_north, los_up = _load_los_bands(los_file)
 
-    # Compute GNSS LOS reference
-    from venti.gnss import compute_gnss_los
+    # GNSS LOS reference for this interval (Venti returns mm; disp is in m)
+    from venti.gnss import compute_gnss_los, compute_gnss_los_std
+    from venti.io import read_netcdf_correction
+    from venti.surface import SENTINEL1_WAVELENGTH_M, estimate_calibration_surface
 
     ref_decimal = _date_to_decimal_year(disp_product.reference_date)
-    sec_decimal = _date_to_decimal_year(disp_product.secondary_date)
+    gnss_kwargs = {
+        "gnss_ref": gnss_ref,
+        "los_east": los_east,
+        "los_north": los_north,
+        "los_up": los_up,
+        "grid": disp_file,
+        "cache_dir": gnss_dir,
+        "ref_date": ref_decimal,
+        "sec_date": _date_to_decimal_year(disp_product.secondary_date),
+    }
+    gnss_los = compute_gnss_los(**gnss_kwargs) / 1000.0
+    gnss_los_std = None
+    if cal.weight_fit_by_gnss_uncertainty:
+        gnss_los_std = compute_gnss_los_std(**gnss_kwargs) / 1000.0
 
-    gnss_los = (
-        compute_gnss_los(
-            gnss_ref=gnss_ref,
-            los_east=los_east,
-            los_north=los_north,
-            los_up=los_up,
-            grid=disp_file,
-            cache_dir=gnss_dir,
-            ref_date=ref_decimal,
-            sec_date=sec_decimal,
-        )
-        / 1000.0
-    )
-
-    # Prepare displacement array.
-    # A single DISP file encodes one (ref_date, sec_date) pair.
-    # displacement is 2-D (y, x); time is a length-1 coordinate.
+    # A single DISP file encodes one (ref_date, sec_date) pair: 2-D (y, x).
     disp_2d = ds_disp.displacement.values.astype(np.float32)
 
-    # Build valid-pixel mask
+    # Valid pixels
     mask = ~np.isnan(disp_2d)
     if "recommended_mask" in ds_disp:
         # recommended_mask convention: 1 = valid/recommended, 0 = invalid
@@ -419,6 +468,10 @@ def run_calibration(
     if "water_mask" in ds_disp:
         # water_mask convention: 1 = land/valid, 0 = water/invalid
         mask &= ds_disp.water_mask.values.astype(bool)
+
+    # Event / deformation areas (True = valid): Venti fills them from their
+    # neighbours before the fit, and the surface still covers them.
+    event_mask = None
     if defo_area_db_json is not None or event_db_json is not None:
         event_mask_file = _build_event_mask(
             disp_file=disp_file,
@@ -429,94 +482,13 @@ def run_calibration(
         if event_mask_file is not None:
             with rasterio.open(event_mask_file) as _src:
                 event_mask = _src.read(1).astype(bool)
-            mask &= event_mask
-            logger.info(
-                "Applied event mask: %d pixels excluded", int((~event_mask).sum())
-            )
+            logger.info("Event mask: %d pixels to fill", int((~event_mask).sum()))
 
-    disp_masked = np.where(mask, disp_2d, np.nan)
-
-    # Optional unwrap-error correction
-    if cal.unwrap_error_correction:
-        from venti.unwrap import correct_region_offset
-
-        wavelength_m = _read_wavelength_m(disp_file)
-        logger.info(
-            "Applying unwrap-error correction (wavelength=%.5f m)...",
-            wavelength_m,
-        )
-        disp_masked = correct_region_offset(
-            input_disp=disp_masked,
-            mask=mask,
-            wavelength=wavelength_m,
-        )
-        if isinstance(disp_masked, np.ma.MaskedArray):
-            disp_masked = disp_masked.filled(np.nan)
-
-    # Fit calibration surface
-    spatial_processor = SpatialProcessor()
-    win_px = cal.window_size_pixels
-    ds_factor = cal.downsample_factor
-    original_shape = disp_masked.shape
-
-    if ds_factor > 1:
-        weights = None
-        if cal.downsample_weighted:
-            if "temporal_coherence" in ds_disp:
-                weights = ds_disp.temporal_coherence.values.astype(np.float32)
-                logger.info(
-                    "Downsampling weighted by temporal coherence (factor=%d)", ds_factor
-                )
-            else:
-                logger.warning(
-                    "downsample_weighted=True but temporal_coherence not found in DISP "
-                    "product; falling back to unweighted downsampling"
-                )
-        else:
-            logger.info(
-                "Downsampling by factor %d (%s)...", ds_factor, cal.downsample_method
-            )
-
-        disp_ds = downsample_array(
-            disp_masked, ds_factor, method=cal.downsample_method, weights=weights
-        )
-        gnss_ds = downsample_array(gnss_los, ds_factor, method=cal.downsample_method)
-        win_x = max(1, win_px // ds_factor)
-        win_y = max(1, win_px // ds_factor)
-    else:
-        disp_ds = disp_masked
-        gnss_ds = gnss_los
-        win_x = win_px
-        win_y = win_px
-
-    logger.info(
-        "Fitting calibration surface (window=%d×%d px, overlap=50%%, smoothing=%s)...",
-        win_x,
-        win_y,
-        cal.calibration_surface_smoothing_method,
-    )
-    cal_surface = spatial_processor.fit_windowed_surface(
-        insar_data=disp_ds,
-        gnss_los=gnss_ds,
-        window_size_x=win_x,
-        window_size_y=win_y,
-        window_overlap_x=win_x // 2,
-        window_overlap_y=win_y // 2,
-        n_jobs=threads_per_worker,
-        smoothing_sigma=cal.calibration_surface_smoothing_sigma,
-        smoothing_method=cal.calibration_surface_smoothing_method,
-        sg_window_length=cal.savitzky_golay.window_length,
-        sg_polyorder=cal.savitzky_golay.polyorder,
-    )
-
-    if ds_factor > 1:
-        cal_surface = upsample_array(cal_surface, original_shape)
-
-    cal_surface_m = cal_surface.astype(np.float32)
-
-    # Optional tropospheric correction: prepare and apply to calibration surface
+    # Corrections for signals GNSS does not contain: removed before the fit
+    # and added back to the surface (Venti), so the surface is what to
+    # subtract from the raw /displacement.
+    corrections: list[np.ndarray] = []
     _tropo_applied = False
-    tropo_corr: np.ndarray | None = None
     if reference_tropo_files and secondary_tropo_files:
         if dem_file is None:
             raise ValueError(
@@ -538,10 +510,67 @@ def run_calibration(
             ref_tropo = _src.read(1).astype(np.float32)
         with rasterio.open(sec_tropo_path) as _src:
             sec_tropo = _src.read(1).astype(np.float32)
-        tropo_corr = sec_tropo - ref_tropo  # differential LOS delay (meters)
-        cal_surface_m = cal_surface_m + tropo_corr
+        corrections.append(sec_tropo - ref_tropo)  # differential LOS delay (m)
         _tropo_applied = True
-        logger.info("Tropospheric correction applied to calibration surface.")
+
+    _set_applied = False
+    if cal.apply_solid_earth_tide_correction:
+        set_corr = read_netcdf_correction(disp_file, "solid_earth_tide")
+        if set_corr is None:
+            logger.warning(
+                "No /corrections/solid_earth_tide in %s; calibrating without SET"
+                " correction",
+                disp_file.name,
+            )
+        else:
+            corrections.append(set_corr.astype(np.float32))
+            _set_applied = True
+
+    weights = None
+    if cal.downsample_factor > 1 and cal.downsample_weighted:
+        if "temporal_coherence" not in ds_disp:
+            raise ValueError(
+                "downsample_weighted=True but temporal_coherence is not in"
+                f" {disp_file.name}"
+            )
+        weights = ds_disp.temporal_coherence.values.astype(np.float32)
+
+    ref_point = _find_reference_point(ds_disp, mask, work_directory)
+    wavelength_m = (
+        _read_wavelength_m(disp_file)
+        if cal.unwrap_error_correction
+        else SENTINEL1_WAVELENGTH_M
+    )
+
+    logger.info(
+        "Fitting calibration surface (window=%d px, downsample=%d, corrections:"
+        " tropo=%s, SET=%s)...",
+        cal.window_size_pixels,
+        cal.downsample_factor,
+        _tropo_applied,
+        _set_applied,
+    )
+    try:
+        result = estimate_calibration_surface(
+            disp_2d,
+            gnss_los,
+            mask,
+            ref_point,
+            cal.window_size_pixels,
+            corrections=corrections,
+            gnss_los_std=gnss_los_std,
+            event_mask=event_mask,
+            options=cal.to_venti(),
+            wavelength_m=wavelength_m,
+            downsample_factor=cal.downsample_factor,
+            downsample_method=cal.downsample_method,
+            downsample_weights=weights,
+            n_jobs=threads_per_worker,
+        )
+    except ValueError as exc:
+        exc.add_note(f"While calibrating {disp_file.name}")
+        raise
+    cal_surface_m = result.surface.astype(np.float32)
 
     # Insert time dimension
 
@@ -550,7 +579,22 @@ def run_calibration(
         cal_surface_m[np.newaxis, :, :],
         coords=coords,
         dims=["time", "y", "x"],
-        attrs={"units": "meters", "long_name": "calibration_correction"},
+        attrs={
+            "units": "meters",
+            "long_name": "calibration_correction",
+            # Removed before the fit and included in the surface
+            "corrections_applied": (
+                ", ".join(
+                    name
+                    for name, applied in [
+                        ("troposphere", _tropo_applied),
+                        ("solid_earth_tide", _set_applied),
+                    ]
+                    if applied
+                )
+                or "none"
+            ),
+        },
     )
     calibration_std = xr.DataArray(
         np.zeros(shape, dtype=np.float32),
@@ -603,7 +647,8 @@ def run_calibration(
         calibration_std=calibration_std,
         spatial_ref=spatial_ref,
         global_metadata={
-            "gnss_reference_epoch": f"{cal.starting_year:.1f}",
+            # GNSS field is sec - ref, i.e. zero at the product reference date
+            "gnss_reference_epoch": f"{ref_decimal:.4f}",
             "auxiliary_model_3d_resolution": "5km",
             "calibration_resolution": f"{int(x_spacing)}m",
         },

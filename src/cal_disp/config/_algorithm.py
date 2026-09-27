@@ -18,8 +18,6 @@ class SavitzkyGolayOptions(YamlModel):
         Filter window length in pixels (must be odd, >= 3).
     polyorder : int
         Polynomial order for fitting (must be less than window_length).
-    deriv : int
-        Derivative order (0 = smoothing only).
 
     """
 
@@ -33,55 +31,6 @@ class SavitzkyGolayOptions(YamlModel):
         ge=0,
         description="Polynomial order for fitting.",
     )
-    deriv: int = Field(
-        default=0,
-        ge=0,
-        description="Derivative order (0 = smoothing only).",
-    )
-
-
-class FFTFilterOptions(YamlModel):
-    """FFT-based filter options for calibration surface smoothing.
-
-    Attributes
-    ----------
-    gaussian_sigma : float
-        Gaussian filter standard deviation in wavelength units.
-    butterworth_order : int
-        Butterworth filter order.
-    spatial_domain : bool
-        Apply filter in spatial domain instead of frequency domain.
-    taper_edges : bool
-        Taper image edges to reduce ringing artefacts.
-    taper_width : float
-        Taper width as a fraction of the image dimensions [0, 0.5].
-
-    """
-
-    gaussian_sigma: float = Field(
-        default=0.1,
-        gt=0,
-        description="Gaussian filter standard deviation in wavelength units.",
-    )
-    butterworth_order: int = Field(
-        default=4,
-        ge=1,
-        description="Butterworth filter order.",
-    )
-    spatial_domain: bool = Field(
-        default=False,
-        description="Apply filter in spatial domain instead of frequency domain.",
-    )
-    taper_edges: bool = Field(
-        default=True,
-        description="Taper image edges to reduce ringing artefacts.",
-    )
-    taper_width: float = Field(
-        default=0.05,
-        ge=0.0,
-        le=0.5,
-        description="Taper width as a fraction of the image dimensions.",
-    )
 
 
 class CalibrationOptions(YamlModel):
@@ -89,22 +38,23 @@ class CalibrationOptions(YamlModel):
 
     Controls GNSS grid type, windowed plane-fitting window size, downsampling,
     unwrap-error correction, and post-assembly smoothing of the calibration
-    surface.  These parameters map directly to the Venti ``GNSSReference`` and
-    ``SpatialProcessor`` API.
+    surface.  `to_venti` converts them to Venti's ``CalibrationOptions`` for
+    ``venti.estimate_calibration_surface``; the downsampling options are
+    passed to it as arguments.
 
     Attributes
     ----------
     grid_type : {'constant', 'variable'}
-        GNSS model type.  ``'constant'`` interpolates a single velocity field
-        scaled to the acquisition interval; ``'variable'`` fetches epoch-specific
-        GNSS displacements for each (ref_date, sec_date) pair.
+        UNR grid product.  ``'constant'``: UNR's precomputed linear rates times
+        the acquisition interval; ``'variable'``: the difference of the daily
+        positions nearest the reference and secondary dates.
     reference_frame : str
         GNSS reference frame, ``'IGS20'`` or ``'IGS14'``.
-    starting_year : float
-        Earliest observation year used to estimate station velocities
-        (``constant`` grid type only).
     unwrap_error_correction : bool
         Apply watershed-based unwrap-error correction before fitting.
+    apply_solid_earth_tide_correction : bool
+        Remove the product's ``/corrections/solid_earth_tide`` before the fit
+        (UNR GNSS already has it removed) and add it back to the surface.
     window_size_meters : float
         Side length of the moving-window used for polynomial plane fitting,
         in metres.
@@ -116,6 +66,22 @@ class CalibrationOptions(YamlModel):
         resolution after fitting.
     downsample_method : {'mean', 'median'}
         Aggregation method used when downsampling.
+    downsample_weighted : bool
+        Weight downsampling by the product's ``temporal_coherence``.
+    event_mask_buffer_pixels : int
+        Pixels by which event / deformation masks are dilated.
+    residual_outlier_mad_threshold : float or None
+        Without an event mask, fill pixels whose InSAR - GNSS residual exceeds
+        this many robust sigmas before the fit.  ``None`` disables.
+    residual_region_mad_threshold : float or None
+        Without an event mask, fill coherent residual regions above this many
+        robust sigmas.  ``None`` disables.
+    residual_region_min_pixels : int
+        Minimum size of such a region.
+    mask_fit_residual_outliers : bool
+        Trim the most extreme 15% / 85% residual quantiles inside each window.
+    weight_fit_by_gnss_uncertainty : bool
+        Weight the windowed fit by the inverse GNSS LOS variance.
     calibration_surface_smoothing_method : {'gaussian', 'gaussian_fft',
         'hanning_fft', 'savitzky_golay'}
         Post-assembly low-pass filter applied to the stitched calibration
@@ -127,17 +93,15 @@ class CalibrationOptions(YamlModel):
     savitzky_golay : SavitzkyGolayOptions
         Savitzky-Golay filter parameters, used when
         ``calibration_surface_smoothing_method = 'savitzky_golay'``.
-    fft_filter : FFTFilterOptions
-        FFT filter parameters, used when
-        ``calibration_surface_smoothing_method`` is an FFT variant.
 
     """
 
     grid_type: Literal["constant", "variable"] = Field(
         default="constant",
         description=(
-            "GNSS model type: 'constant' uses a velocity field scaled to the "
-            "acquisition interval; 'variable' fetches epoch-specific displacements."
+            "UNR grid product: 'constant' uses UNR's precomputed rates scaled to "
+            "the acquisition interval; 'variable' uses the positions nearest the "
+            "two dates. Must match the staged UNR data (unr_grid_type)."
         ),
     )
 
@@ -146,19 +110,20 @@ class CalibrationOptions(YamlModel):
         description="GNSS reference frame used for station timeseries.",
     )
 
-    starting_year: float = Field(
-        default=2014.0,
-        description=(
-            "Earliest observation year included in velocity estimation "
-            "(constant grid type only)."
-        ),
-    )
-
     unwrap_error_correction: bool = Field(
         default=True,
         description=(
             "Apply watershed-based unwrap-error correction to the displacement "
             "field before fitting the calibration surface."
+        ),
+    )
+
+    apply_solid_earth_tide_correction: bool = Field(
+        default=True,
+        description=(
+            "Remove the product's /corrections/solid_earth_tide before the fit "
+            "(UNR GNSS already has it removed) and add it back to the surface. "
+            "A product without the layer is calibrated without it (warning)."
         ),
     )
 
@@ -197,9 +162,53 @@ class CalibrationOptions(YamlModel):
         description=(
             "Weight downsampling by temporal coherence. "
             "When True, the temporal_coherence layer from the DISP product is "
-            "used as per-pixel weights during aggregation.  Falls back to "
-            "unweighted downsampling if the layer is unavailable."
+            "used as per-pixel weights during aggregation; an error is raised "
+            "if the layer is missing."
         ),
+    )
+
+    event_mask_buffer_pixels: int = Field(
+        default=0,
+        ge=0,
+        description="Pixels by which event / deformation masks are dilated.",
+    )
+
+    residual_outlier_mad_threshold: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Only without an event mask: fill pixels whose InSAR - GNSS residual "
+            "exceeds this many robust (1.4826 * MAD) sigmas before the fit. "
+            "null disables."
+        ),
+    )
+
+    residual_region_mad_threshold: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Only without an event mask: fill coherent residual regions above "
+            "this many robust sigmas before the fit. null disables."
+        ),
+    )
+
+    residual_region_min_pixels: int = Field(
+        default=20,
+        ge=1,
+        description="Minimum size (downsampled pixels) of a residual region.",
+    )
+
+    mask_fit_residual_outliers: bool = Field(
+        default=True,
+        description=(
+            "Trim the most extreme 15% / 85% InSAR - GNSS residual quantiles "
+            "inside each fit window."
+        ),
+    )
+
+    weight_fit_by_gnss_uncertainty: bool = Field(
+        default=False,
+        description="Weight the windowed fit by the inverse GNSS LOS variance.",
     )
 
     calibration_surface_smoothing_method: Literal[
@@ -231,19 +240,47 @@ class CalibrationOptions(YamlModel):
         ),
     )
 
-    fft_filter: FFTFilterOptions = Field(
-        default_factory=FFTFilterOptions,
-        description=(
-            "FFT filter parameters.  Active when "
-            "calibration_surface_smoothing_method is an FFT variant."
-        ),
-    )
-
     @computed_field  # type: ignore[misc]
     @property
     def window_size_pixels(self) -> int:
         """Window size in pixels derived from metres and posting."""
         return max(1, int(self.window_size_meters / self.posting_meters))
+
+    def to_venti(self):
+        """Venti ``CalibrationOptions`` with these settings.
+
+        Options Venti does not take from its config (downsampling) are
+        passed to ``estimate_calibration_surface`` separately.
+        """
+        from venti.workflow.config import CalibrationOptions as VentiOptions
+
+        return VentiOptions(
+            **self.model_dump(include=VENTI_OPTIONS - {"savitzky_golay"}),
+            savitzky_golay=self.savitzky_golay.model_dump(),
+        )
+
+
+# CalibrationOptions fields passed to Venti's CalibrationOptions
+VENTI_OPTIONS = {
+    "grid_type",
+    "reference_frame",
+    "unwrap_error_correction",
+    "apply_solid_earth_tide_correction",
+    "window_size_meters",
+    "posting_meters",
+    "event_mask_buffer_pixels",
+    "residual_outlier_mad_threshold",
+    "residual_region_mad_threshold",
+    "residual_region_min_pixels",
+    "mask_fit_residual_outliers",
+    "weight_fit_by_gnss_uncertainty",
+    "calibration_surface_smoothing_method",
+    "calibration_surface_smoothing_sigma",
+    "savitzky_golay",
+}
+# Venti options cal-disp does not expose: tropo is applied when the runconfig
+# lists tropo files, and each run has its own GNSS cache.
+VENTI_OPTIONS_NOT_EXPOSED = {"apply_tropo_correction", "recompute_gnss"}
 
 
 class AlgorithmParameters(YamlModel):

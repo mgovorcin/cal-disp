@@ -97,3 +97,126 @@ def test_run_calibration_requires_staged_grid_type(
             output_dir=tmp_path / "out",
             los_file=sample_static_los,
         )
+
+
+@pytest.fixture
+def captured_core(monkeypatch):
+    """Replace Venti's core with a recorder returning a zero surface."""
+    from venti import surface
+
+    calls: list[dict] = []
+
+    def _fake(disp, gnss_los, mask, ref_point, window_size, **kwargs):
+        calls.append(
+            {
+                "disp": disp,
+                "gnss_los": gnss_los,
+                "mask": mask,
+                "ref_point": ref_point,
+                "window_size": window_size,
+                **kwargs,
+            }
+        )
+        return surface.CalibrationSurface(np.zeros_like(disp))
+
+    monkeypatch.setattr(surface, "estimate_calibration_surface", _fake)
+    return calls
+
+
+@pytest.mark.parametrize("apply_set", [True, False])
+def test_run_calibration_venti_core_inputs(
+    tmp_path: Path,
+    sample_disp_product_with_corrections: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    apply_set: bool,
+):
+    lookup_file, tenv8_dir = sample_unr_data
+    options = CalibrationOptions(
+        apply_solid_earth_tide_correction=apply_set,
+        downsample_factor=2,
+        downsample_weighted=True,
+        event_mask_buffer_pixels=2,
+    )
+
+    out_path = run_calibration(
+        disp_file=sample_disp_product_with_corrections,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=AlgorithmParameters(calibration_options=options),
+    )
+
+    (call,) = captured_core
+    with xr.open_dataset(
+        sample_disp_product_with_corrections, group="corrections"
+    ) as corr:
+        set_layer = corr["solid_earth_tide"].values
+    with xr.open_dataset(sample_disp_product_with_corrections) as disp:
+        coherence = disp["temporal_coherence"].values
+
+    # SET is handed to Venti as a correction (removed before the fit)
+    if apply_set:
+        (correction,) = call["corrections"]
+        np.testing.assert_allclose(correction, set_layer, rtol=1e-6)
+    else:
+        assert list(call["corrections"]) == []
+    # Displacement in m, GNSS converted from mm to m, valid reference pixel
+    assert call["disp"].dtype == np.float32
+    assert np.nanmax(np.abs(call["gnss_los"])) < 0.01
+    assert call["mask"][call["ref_point"]]
+    assert call["window_size"] == options.window_size_pixels
+    assert call["options"].model_dump(
+        include={"apply_solid_earth_tide_correction", "event_mask_buffer_pixels"}
+    ) == {
+        "apply_solid_earth_tide_correction": apply_set,
+        "event_mask_buffer_pixels": 2,
+    }
+    assert call["downsample_factor"] == 2
+    np.testing.assert_allclose(call["downsample_weights"], coherence, rtol=1e-6)
+
+    with xr.open_dataset(out_path) as ds:
+        applied = ds["calibration"].attrs["corrections_applied"]
+    assert applied == ("solid_earth_tide" if apply_set else "none")
+
+
+def test_run_calibration_without_set_layer_warns(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    caplog,
+):
+    lookup_file, tenv8_dir = sample_unr_data
+    run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+    )
+
+    assert list(captured_core[0]["corrections"]) == []
+    assert "calibrating without SET" in caplog.text
+
+
+def test_find_reference_point(tmp_path: Path):
+    from cal_disp.workflow import _find_reference_point
+
+    coherence = np.full((40, 50), 0.3, dtype=np.float32)
+    coherence[5:15, 30:45] = 0.99  # best block
+    coherence[30, 5] = 1.0  # higher, but masked out
+    mask = np.ones(coherence.shape, dtype=bool)
+    mask[30, 5] = False
+    ds = xr.Dataset(
+        {"temporal_coherence": (["y", "x"], coherence)},
+        coords={"y": 1000.0 - 30.0 * np.arange(40), "x": 30.0 * np.arange(50)},
+    )
+
+    row, col = _find_reference_point(ds, mask, tmp_path)
+
+    assert 5 <= row < 15
+    assert 30 <= col < 45
