@@ -107,6 +107,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["F403"]
 "tests/**" = ["D", "N", "PTH"]
+# Long lines are mostly the embedded HTML/CSS/JS viewer template
+"scripts/build_unr_frame_db.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
