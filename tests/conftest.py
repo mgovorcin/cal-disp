@@ -423,20 +423,39 @@ def sample_unr_data(tmp_path: Path) -> tuple[Path, Path]:
     lookup_file = tmp_path / "grid_latlon_lookup_v0.2.txt"
     lookup_file.write_text(lookup_content)
 
-    # tenv8 files directory
+    # tenv8 files directory, staged like `cal-disp download unr` for both grid
+    # types: {id:06d}_IGS20_{grid_type}.tenv8, the name venti's
+    # download_station() looks for, so the pre-staged files are reused
+    # without hitting the network.
     tenv8_dir = tmp_path / "tenv8"
     tenv8_dir.mkdir()
 
-    # Create sample tenv8 files named {id:06d}_IGS20.tenv8 to match the
-    # filename pattern expected by venti's download_station() so that the
-    # pre-staged symlinks are reused without hitting the network.
+    def _write(path: Path, t: np.ndarray, enu: np.ndarray, sigma: float) -> None:
+        rows = [
+            f"{ti:.4f} {e:.3f} {n:.3f} {u:.3f} {sigma} {sigma} {sigma} 0"
+            for ti, (e, n, u) in zip(t, enu.T)
+        ]
+        path.write_text("\n".join(rows) + "\n")
+
+    # constant: exact linear rates (0.2, 0.1, -0.3 mm/yr) from 2014, constant
+    # rate sigmas; east reaches 2.4 mm at 2026.0
+    t_const = np.linspace(2014.0, 2026.0, 601)
+    rates = np.array([[0.2], [0.1], [-0.3]])
+    # variable: daily positions over 2022 (covers the sample DISP dates)
+    t_var = 2022.0 + np.arange(365) / 365.0
     for grid_id in [1, 2, 3, 4]:
-        tenv8_file = tenv8_dir / f"{grid_id:06d}_IGS20.tenv8"
-        content = """2022.0000    0.0    0.0    0.0    1.0    1.0    1.0  0
-2022.0833    1.2    0.5    2.1    1.0    1.0    1.0  0
-2022.1667    2.4    1.0    4.2    1.0    1.0    1.0  0
-"""
-        tenv8_file.write_text(content)
+        _write(
+            tenv8_dir / f"{grid_id:06d}_IGS20_constant.tenv8",
+            t_const,
+            rates * (t_const - 2014.0),
+            0.1,
+        )
+        _write(
+            tenv8_dir / f"{grid_id:06d}_IGS20_variable.tenv8",
+            t_var,
+            rates * (t_var - 2022.0) * grid_id,
+            1.0,
+        )
 
     return lookup_file, tenv8_dir
 

@@ -101,6 +101,8 @@ def run(runconfig: CalibrationWorkflow, debug: bool = False) -> Path:
         threads_per_worker=runconfig.worker_settings.threads_per_worker,
         work_directory=runconfig.work_directory,
         pge_runconfig=str(runconfig._to_yaml_obj()),
+        calibration_reference_version=runconfig.input_options.unr_grid_version,
+        calibration_reference_type=runconfig.input_options.unr_grid_type,
     )
 
     # Generate browse image

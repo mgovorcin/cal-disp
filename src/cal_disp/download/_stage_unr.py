@@ -14,12 +14,14 @@ from tqdm.contrib.concurrent import thread_map
 from urllib3.util.retry import Retry
 
 __all__ = [
+    "GRID_BASE_URLS",
     "create_session",
     "download_lookup_table",
     "load_lookup_table",
     "download_grid_file",
     "download_grid_files",
     "download_unr_grid",
+    "grid_file_name",
 ]
 
 logger = logging.getLogger(__name__)
@@ -31,13 +33,34 @@ DEFAULT_VERSION: Literal["0.1", "0.2", "0.3"] = "0.3"
 LOOKUP_URL = (
     "https://geodesy.unr.edu/grid_timeseries/Version{version}/grid_latlon_lookup.txt"
 )
-GRID_BASE_URL = (
-    "https://geodesy.unr.edu/grid_timeseries/Version{version}/time_variable_gridded"
-)
+# "contsant" (sic) is UNR's actual path spelling. The constant product holds
+# precomputed linear rates and exists only for Version0.3 (IGS20 and NA).
+GRID_BASE_URLS = {
+    "constant": (
+        "https://geodesy.unr.edu/grid_timeseries/Version{version}/time_contsant_gridded"
+    ),
+    "variable": (
+        "https://geodesy.unr.edu/grid_timeseries/Version{version}/time_variable_gridded"
+    ),
+}
+CONSTANT_VERSIONS = {"0.3"}
+CONSTANT_PLATES = {"IGS20", "NA"}
 
 # Type aliases
 PlateType = Literal["NA", "PA", "IGS14", "IGS20"]
 VersionType = Literal["0.1", "0.2", "0.3"]
+GridType = Literal["constant", "variable"]
+DEFAULT_GRID_TYPE: GridType = "constant"
+
+
+def grid_file_name(grid_id: int, plate: str, grid_type: str) -> str:
+    """Local file name of a staged grid point, ``<id>_<plate>_<grid_type>.tenv8``.
+
+    Both UNR products share one remote file name, so the grid type is part of
+    the local name. This matches the name Venti's ``download_station`` looks
+    for, so Venti reuses staged files instead of downloading them again.
+    """
+    return f"{grid_id:06d}_{plate}_{grid_type}.tenv8"
 
 
 def create_session(retries: int = 5, backoff: float = 1.0) -> requests.Session:
@@ -82,7 +105,7 @@ def download_lookup_table(
     output_dir : Path
         Directory where lookup file will be saved.
     version : {"0.1", "0.2", "0.3"}, optional
-        UNR data version. Default is "0.2".
+        UNR data version. Default is "0.3".
     session : requests.Session or None, optional
         Session with retry logic. If None, a new session is created.
 
@@ -186,6 +209,7 @@ def download_grid_file(
     output_dir: Path,
     plate: PlateType = "IGS20",
     version: VersionType = DEFAULT_VERSION,
+    grid_type: GridType = DEFAULT_GRID_TYPE,
     session: requests.Session | None = None,
 ) -> Path:
     r"""Download a single grid point timeseries file.
@@ -202,19 +226,22 @@ def download_grid_file(
     plate : {"NA", "PA", "IGS14", "IGS20"}, optional
         Reference plate for the data. Default is "IGS20".
     version : {"0.1", "0.2", "0.3"}, optional
-        UNR data version. Default is "0.2".
+        UNR data version. Default is "0.3".
+    grid_type : {"constant", "variable"}, optional
+        ``"constant"``: precomputed linear rates (Version 0.3, IGS20/NA only).
+        ``"variable"``: time-variable positions. Default is "constant".
     session : requests.Session or None, optional
         Session with retry logic. If None, a new session is created.
 
     Returns
     -------
     Path
-        Path to the downloaded file.
+        Path to the downloaded file, named by `grid_file_name`.
 
     Raises
     ------
     ValueError
-        If version is not supported.
+        If version, or the grid type for this version/plate, is not supported.
     requests.HTTPError
         If download fails.
 
@@ -241,13 +268,23 @@ def download_grid_file(
     if plate == "IGS14" and version in ("0.2", "0.3"):
         plate = "IGS20"
 
+    if grid_type == "constant" and (
+        version not in CONSTANT_VERSIONS or plate not in CONSTANT_PLATES
+    ):
+        msg = (
+            "UNR publishes the constant grid only for versions"
+            f" {sorted(CONSTANT_VERSIONS)} and plates {sorted(CONSTANT_PLATES)},"
+            f" got version='{version}', plate='{plate}'"
+        )
+        raise ValueError(msg)
+
     # Build URL and output path
     filename = f"{plate}/{grid_id:06d}_{plate}.tenv8"
-    url = f"{GRID_BASE_URL.format(version=version)}/{filename}"
+    url = f"{GRID_BASE_URLS[grid_type].format(version=version)}/{filename}"
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{grid_id:06d}_{plate}.tenv8"
+    output_path = output_dir / grid_file_name(grid_id, plate, grid_type)
 
     # Skip if already downloaded
     if output_path.exists():
@@ -270,6 +307,7 @@ def download_grid_files(
     output_dir: Path,
     plate: PlateType = "IGS20",
     version: VersionType = DEFAULT_VERSION,
+    grid_type: GridType = DEFAULT_GRID_TYPE,
     max_workers: int = 4,
 ) -> list[Path]:
     """Download multiple grid files in parallel.
@@ -283,7 +321,9 @@ def download_grid_files(
     plate : {"NA", "PA", "IGS14", "IGS20"}, optional
         Reference plate. Default is "IGS20".
     version : {"0.1", "0.2", "0.3"}, optional
-        UNR data version. Default is "0.2".
+        UNR data version. Default is "0.3".
+    grid_type : {"constant", "variable"}, optional
+        UNR grid product. Default is "constant".
     max_workers : int, optional
         Number of parallel download threads. Default is 4.
 
@@ -309,6 +349,7 @@ def download_grid_files(
         output_dir=output_dir,
         plate=plate,
         version=version,
+        grid_type=grid_type,
         session=session,
     )
 
@@ -375,6 +416,7 @@ def download_unr_grid(
     margin_deg: float = 0.5,
     plate: PlateType = "IGS20",
     version: VersionType = DEFAULT_VERSION,
+    grid_type: GridType = DEFAULT_GRID_TYPE,
     max_workers: int = 4,
 ) -> Path:
     """Download UNR gridded GNSS timeseries for a given frame.
@@ -393,7 +435,9 @@ def download_unr_grid(
     plate : {"NA", "PA", "IGS14", "IGS20"}, optional
         Reference plate. Default is "IGS20".
     version : {"0.1", "0.2", "0.3"}, optional
-        UNR grid version. Default is "0.2".
+        UNR grid version. Default is "0.3".
+    grid_type : {"constant", "variable"}, optional
+        UNR grid product. Default is "constant".
     max_workers : int, optional
         Number of parallel download threads. Default is 4.
 
@@ -417,7 +461,8 @@ def download_unr_grid(
     """
     logger.info(
         f"Downloading UNR grid for frame {frame_id} "
-        f"(plate={plate}, version={version}, margin={margin_deg}°)"
+        f"(plate={plate}, version={version}, grid_type={grid_type},"
+        f" margin={margin_deg}°)"
     )
 
     output_dir = Path(output_dir)
@@ -457,6 +502,7 @@ def download_unr_grid(
         output_dir=output_dir,
         plate=plate,
         version=version,
+        grid_type=grid_type,
         max_workers=max_workers,
     )
 

@@ -127,19 +127,28 @@ def _load_los_bands(
     return los_east, los_north, los_up
 
 
+def _staged_station_files(
+    unr_timeseries_dir: Path, reference_frame: str, grid_type: str
+) -> list[Path]:
+    """Pre-staged UNR station files of one reference frame and grid type."""
+    return sorted(unr_timeseries_dir.glob(f"*_{reference_frame}_{grid_type}.tenv8"))
+
+
 def _setup_gnss_reference(
     disp_product: DispProduct,
     unr_grid_latlon_file: Path,
     unr_timeseries_dir: Path,
     gnss_dir: Path,
     reference_frame: str,
+    grid_type: str,
 ):
     """Initialise a ``GNSSReference`` reusing pre-staged UNR files.
 
-    Cal-disp pre-stages UNR tenv8 files via ``cal-disp download unr``.
-    Venti's ``GNSSReference.download_stations()`` will skip any file already
-    present in ``output_dir``, so we symlink the staged files into a dedicated
-    gnss working directory before calling it.
+    Cal-disp pre-stages UNR tenv8 files via ``cal-disp download unr``, named
+    ``<id>_<frame>_<grid_type>.tenv8`` like Venti's own downloads. Venti's
+    ``GNSSReference.download_stations()`` skips any file already present in
+    ``output_dir``, so the staged files of this frame and grid type are
+    symlinked into a dedicated gnss working directory before calling it.
     """
     from venti.gnss import GNSSReference
 
@@ -151,7 +160,15 @@ def _setup_gnss_reference(
         lookup_link.symlink_to(unr_grid_latlon_file.resolve())
 
     # Symlink pre-staged tenv8 files so download_stations() uses them directly
-    for tenv8 in unr_timeseries_dir.glob("*.tenv8"):
+    staged = _staged_station_files(unr_timeseries_dir, reference_frame, grid_type)
+    if not staged:
+        msg = (
+            f"No staged UNR files '*_{reference_frame}_{grid_type}.tenv8' in"
+            f" {unr_timeseries_dir}. Stage them with `cal-disp download unr"
+            f" --grid-type {grid_type}`."
+        )
+        raise FileNotFoundError(msg)
+    for tenv8 in staged:
         link = gnss_dir / tenv8.name
         if not link.exists():
             link.symlink_to(tenv8.resolve())
@@ -166,6 +183,7 @@ def _setup_gnss_reference(
         output_dir=gnss_dir,
         reference_frame=reference_frame,
         utm_epsg=utm_epsg,
+        grid_type=grid_type,
     )
     n_stations = gnss_ref.download_stations()
     logger.info("GNSS setup complete: %d stations available", n_stations)
@@ -193,7 +211,7 @@ def run_calibration(
     # Calibration reference metadata
     calibration_reference_name: str = "UNR gridded data",
     calibration_reference_version: str = "0.3",
-    calibration_reference_type: str = "constant",
+    calibration_reference_type: str | None = None,
     calibration_reference_reference_frame: str = "IGS20",
     # Product metadata
     platform_id: str = "S1A",
@@ -258,8 +276,9 @@ def run_calibration(
         Human-readable name of the calibration reference dataset.
     calibration_reference_version : str
         Version string of the calibration reference dataset.
-    calibration_reference_type : str
-        ``'constant'`` or ``'variable'``.
+    calibration_reference_type : str, optional
+        ``'constant'`` or ``'variable'``. Must match the calibration
+        ``grid_type``; defaults to it.
     calibration_reference_reference_frame : str
         GNSS reference frame (e.g. ``'IGS20'``).
     platform_id : str
@@ -308,6 +327,14 @@ def run_calibration(
     work_directory.mkdir(parents=True, exist_ok=True)
 
     cal = algorithm_parameters.calibration_options
+    if calibration_reference_type is None:
+        calibration_reference_type = cal.grid_type
+    elif calibration_reference_type != cal.grid_type:
+        msg = (
+            f"UNR data type '{calibration_reference_type}' does not match the"
+            f" calibration grid_type '{cal.grid_type}'"
+        )
+        raise ValueError(msg)
 
     # Load DISP product
     logger.info("Loading DISP product: %s", disp_file.name)
@@ -336,7 +363,9 @@ def run_calibration(
 
     source_data_file_list = [disp_file.name]
     source_calibration_file_list = [unr_grid_latlon_file.name]
-    tenv8_files = sorted(unr_timeseries_dir.glob("*.tenv8"))
+    tenv8_files = _staged_station_files(
+        unr_timeseries_dir, cal.reference_frame, cal.grid_type
+    )
     source_calibration_file_list.extend(f.name for f in tenv8_files[:10])
 
     source_data_satellite_names = [f"Sentinel-{platform_id[-2:]}"]
@@ -350,6 +379,7 @@ def run_calibration(
         unr_timeseries_dir=unr_timeseries_dir,
         gnss_dir=gnss_dir,
         reference_frame=cal.reference_frame,
+        grid_type=cal.grid_type,
     )
 
     # Load LOS unit vectors
@@ -368,12 +398,10 @@ def run_calibration(
             los_east=los_east,
             los_north=los_north,
             los_up=los_up,
-            netcdf_file=disp_file,
-            grid_type=cal.grid_type,
+            grid=disp_file,
             cache_dir=gnss_dir,
             ref_date=ref_decimal,
             sec_date=sec_decimal,
-            starting_year=cal.starting_year,
         )
         / 1000.0
     )

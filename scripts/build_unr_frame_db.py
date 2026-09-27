@@ -38,7 +38,7 @@ from opera_utils import get_frame_geojson
 from shapely.geometry import mapping
 
 from cal_disp.download._stage_unr import (
-    GRID_BASE_URL,
+    GRID_BASE_URLS,
     download_lookup_table,
     get_frame_grid_points,
     load_lookup_table,
@@ -46,6 +46,8 @@ from cal_disp.download._stage_unr import (
 
 # UNR plates to build download-URL columns for.
 PLATES = ("IGS20", "NA", "PA")
+# URLs point at the time-variable product (the constant one has no PA plate).
+GRID_BASE_URL = GRID_BASE_URLS["variable"]
 
 
 def get_unr_url(grid_id: int, plate: str, version: str) -> str:

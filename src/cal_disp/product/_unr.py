@@ -46,7 +46,8 @@ class UnrGrid:
     data_dir: Path
     frame_id: int | None = None
 
-    _TENV8_PATTERN = re.compile(r"(\d{6})_[A-Z0-9]+\.tenv8")
+    # <id>_<plate>.tenv8 (older staging) or <id>_<plate>_<grid_type>.tenv8
+    _TENV8_PATTERN = re.compile(r"(\d{6})_[A-Z0-9]+(?:_(?:constant|variable))?\.tenv8")
 
     def __post_init__(self) -> None:
         """Validate paths after construction."""
