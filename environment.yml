@@ -10,6 +10,9 @@ dependencies:
   - rioxarray
   - shapely
   - h5py
+  # netCDF4 from conda shares one HDF5 with gdal/h5py; the pip wheel bundles
+  # its own HDF5, which can crash when several threads read files (Venti D23)
+  - netcdf4
 
   # Visualization (conda-forge has better platform support)
   - matplotlib-base

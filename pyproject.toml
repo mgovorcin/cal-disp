@@ -32,12 +32,14 @@ dependencies = [
   "shapely",
   "h5py",
   "h5netcdf",
+  "netcdf4",  # imported directly (workflow._read_wavelength_m)
   "requests",
   "tqdm",
   "ruamel.yaml",
   "click",
   "matplotlib",
-  "opera-utils",
+  # the `disp` extra brings what opera_utils.disp imports (reference pixel)
+  "opera-utils[disp]",
   # TEMPORARY: switch back to Venti main before merging (see C2 in learning log)
   "venti @ git+https://github.com/opera-adt/Venti@modular",
 ]

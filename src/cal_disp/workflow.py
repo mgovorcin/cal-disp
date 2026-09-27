@@ -14,7 +14,9 @@ Orchestrates GNSS-based calibration using Venti as the processing back-end:
 
 from __future__ import annotations
 
+import functools
 import importlib.metadata
+import inspect
 import logging
 from datetime import datetime, timezone
 from io import StringIO
@@ -242,7 +244,34 @@ def _setup_gnss_reference(
     return gnss_ref
 
 
+def _in_scratch_temp_dir(func):
+    """Run `func` with all temporary files under ``<work_directory>/tmp``.
+
+    Python ``tempfile`` and GDAL work files (``CPL_TMPDIR``) otherwise go to
+    the system temp dir or the current directory, which may not be writable
+    in a PGE container (GDAL then failed inside Venti's gap filling). Uses
+    Venti's ``scratch_temp_dir``: a private ``tmp/run_*`` folder, removed
+    afterwards, with the previous settings restored.
+    """
+    signature = inspect.signature(func)
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        from venti.workflow.utils import scratch_temp_dir
+
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        work_directory = bound.arguments["work_directory"]
+        if work_directory is None:
+            work_directory = Path(bound.arguments["output_dir"]) / "scratch"
+        with scratch_temp_dir(work_directory):
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
 # Public entry point
+@_in_scratch_temp_dir
 def run_calibration(
     disp_file: Path,
     unr_grid_latlon_file: Path,
@@ -321,7 +350,9 @@ def run_calibration(
     threads_per_worker : int
         Threads per Dask worker, forwarded to the windowed fit as ``n_jobs``.
     work_directory : Path, optional
-        Scratch directory for intermediate files and GNSS cache.
+        Scratch directory for intermediate files and GNSS cache (default
+        ``output_dir / "scratch"``). All temporary files, including GDAL's,
+        go to a private ``tmp/run_*`` folder inside it, deleted at the end.
     pge_runconfig : str, optional
         Serialised PGE run-config YAML stored in product metadata.
     calibration_reference_name : str
