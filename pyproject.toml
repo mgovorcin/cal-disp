@@ -38,7 +38,8 @@ dependencies = [
   "click",
   "matplotlib",
   "opera-utils",
-  "venti @ git+https://github.com/opera-adt/Venti",
+  # TEMPORARY: switch back to Venti main before merging (see C2 in learning log)
+  "venti @ git+https://github.com/opera-adt/Venti@modular",
 ]
 
 [project.urls]
