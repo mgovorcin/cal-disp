@@ -394,7 +394,6 @@ def run_calibration(
     time = ds_disp.time.values
     y = ds_disp.y.values
     x = ds_disp.x.values
-    shape = (len(time), len(y), len(x))
 
     spatial_ref = ds_disp.get("spatial_ref")
 
@@ -453,9 +452,8 @@ def run_calibration(
         "sec_date": _date_to_decimal_year(disp_product.secondary_date),
     }
     gnss_los = compute_gnss_los(**gnss_kwargs) / 1000.0
-    gnss_los_std = None
-    if cal.weight_fit_by_gnss_uncertainty:
-        gnss_los_std = compute_gnss_los_std(**gnss_kwargs) / 1000.0
+    # Also written to the product as calibration_std (see there)
+    gnss_los_std = (compute_gnss_los_std(**gnss_kwargs) / 1000.0).astype(np.float32)
 
     # A single DISP file encodes one (ref_date, sec_date) pair: 2-D (y, x).
     disp_2d = ds_disp.displacement.values.astype(np.float32)
@@ -558,7 +556,7 @@ def run_calibration(
             ref_point,
             cal.window_size_pixels,
             corrections=corrections,
-            gnss_los_std=gnss_los_std,
+            gnss_los_std=gnss_los_std if cal.weight_fit_by_gnss_uncertainty else None,
             event_mask=event_mask,
             options=cal.to_venti(),
             wavelength_m=wavelength_m,
@@ -596,11 +594,24 @@ def run_calibration(
             ),
         },
     )
+    # TODO: discuss and improve. This is the uncertainty of the GNSS reference
+    # (UNR sigmas projected to LOS and interpolated per pixel), NOT of the
+    # fitted surface, which averages GNSS over each window and is smoothed.
     calibration_std = xr.DataArray(
-        np.zeros(shape, dtype=np.float32),
+        gnss_los_std[np.newaxis, :, :],
         coords=coords,
         dims=["time", "y", "x"],
-        attrs={"units": "meters", "long_name": "calibration_uncertainty"},
+        attrs={
+            "units": "meters",
+            "long_name": "calibration_uncertainty",
+            "uncertainty_source": (
+                "GNSS reference uncertainty: UNR"
+                f" {cal.grid_type}-grid sigmas projected to LOS and interpolated"
+                " to each pixel (rate sigma x interval for 'constant', combined"
+                " reference/secondary position sigma for 'variable'). Not the"
+                " uncertainty of the fitted calibration surface."
+            ),
+        },
     )
 
     # Coarse 3-D velocity model (placeholder — DecompositionWorkflow TBD)

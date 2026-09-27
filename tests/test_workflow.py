@@ -50,11 +50,18 @@ def test_run_calibration_offline(
     assert out_path.exists()
     with xr.open_dataset(out_path) as ds:
         calibration = ds["calibration"].values
+        calibration_std = ds["calibration_std"].values
+        uncertainty_source = ds["calibration_std"].attrs["uncertainty_source"]
     with xr.open_dataset(sample_disp_product) as disp:
         valid = np.isfinite(disp["displacement"].values)
 
     assert calibration.shape == (1, *valid.shape)
     assert np.isfinite(calibration[0][valid]).all()
+    # calibration_std holds the GNSS reference uncertainty (m), documented as such
+    assert calibration_std.shape == calibration.shape
+    assert (calibration_std[0][valid] > 0).all()
+    assert (calibration_std[0][valid] < 0.01).all()
+    assert uncertainty_source.startswith("GNSS reference uncertainty")
     # GNSS came only from the pre-staged files of this grid type
     staged = {p.name for p in tenv8_dir.glob(f"*_IGS20_{grid_type}.tenv8")}
     used = {p.name for p in (output_dir / "scratch" / "gnss").glob("*.tenv8")}
