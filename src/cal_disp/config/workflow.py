@@ -190,7 +190,7 @@ class CalibrationWorkflow(YamlModel):
         level: int = 20,
         format_string: Optional[str] = None,  # logging.INFO
     ):
-        """Set up logging configuration for the workflow.
+        """Set up logging for cal-disp and Venti (console and ``log_file``).
 
         Parameters
         ----------
@@ -227,6 +227,11 @@ class CalibrationWorkflow(YamlModel):
             file_handler.setLevel(level)
             file_handler.setFormatter(logging.Formatter(format_string))
             logger.addHandler(file_handler)
+
+        # Venti logs under "venti"; send it to the same console and log file
+        from venti.log_setup import configure_logging
+
+        configure_logging(level=level, log_file=self.log_file)
 
         return logger
 

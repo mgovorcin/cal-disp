@@ -13,7 +13,7 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
 ]
-license = { file = "LICENSE.txt" }
+license = { file = "LICENSE" }
 # The version will be written into a version.py upon install, auto-generated
 # see section: setuptools_scm
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
@@ -32,12 +32,16 @@ dependencies = [
   "shapely",
   "h5py",
   "h5netcdf",
+  "netcdf4",  # imported directly (workflow._read_wavelength_m)
   "requests",
+  "urllib3",  # imported directly (download retry)
   "tqdm",
   "ruamel.yaml",
   "click",
   "matplotlib",
-  "opera-utils",
+  "cmap",  # browse image colormaps
+  # the `disp` extra brings what opera_utils.disp imports (reference pixel)
+  "opera-utils[disp]",
   "venti @ git+https://github.com/opera-adt/Venti",
 ]
 
@@ -65,6 +69,14 @@ file = ["requirements/download.txt"]
 write_to = "src/cal_disp/_version.py"
 # https://github.com/pypa/setuptools_scm#version-number-construction
 version_scheme = "no-guess-dev" # Will not guess the next version
+
+[tool.black]
+# Lowest supported Python (requires-python); without it Black targets every
+# version up to its newest and warns that the running Python cannot check it.
+target-version = ["py311"]
+# Same style as the pre-commit hook, so plain `black` gives identical results
+preview = true
+enable-unstable-feature = ["string_processing"]
 
 [tool.ruff]
 src = ["src"]

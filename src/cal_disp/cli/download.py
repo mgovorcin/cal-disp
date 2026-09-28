@@ -112,10 +112,22 @@ def disp_s1(
     help="Margin in degrees to expand frame bounding box.",
     show_default=True,
 )
+@click.option(
+    "--grid-type",
+    "-t",
+    type=click.Choice(["constant", "variable"]),
+    default="constant",
+    help=(
+        "UNR grid product: 'constant' (precomputed linear rates) or 'variable'"
+        " (time-variable positions). Must match the calibration grid_type."
+    ),
+    show_default=True,
+)
 def unr(
     frame_id: int,
     output_dir: Path,
     margin: float,
+    grid_type: str,
 ) -> None:
     r"""Download UNR GPS timeseries data for a DISP-S1 frame.
 
@@ -132,6 +144,9 @@ def unr(
     Expand bounding box by 1 degree:
         $ cal-disp download unr --frame-id 8882 -o ./unr_data -m 1.0
 
+    Download the time-variable product instead of the constant rates:
+        $ cal-disp download unr --frame-id 8882 -o ./unr_data -t variable
+
     """
     from cal_disp.download import download_unr_grid
 
@@ -141,6 +156,7 @@ def unr(
         frame_id=frame_id,
         output_dir=output_dir,
         margin_deg=margin,
+        grid_type=grid_type,
     )
     click.echo(f"Download complete: {output_dir}")
 

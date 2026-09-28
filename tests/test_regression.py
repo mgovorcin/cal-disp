@@ -74,7 +74,7 @@ def test_full_workflow(
             "-uv",
             "0.2",
             "-ut",
-            "variable",
+            "constant",
             "--los-file",
             str(sample_static_los),
             "--dem-file",
@@ -161,7 +161,7 @@ def test_workflow_with_corrections(
             "-uv",
             "0.2",
             "-ut",
-            "variable",
+            "constant",
             "--los-file",
             str(sample_static_los),
             "--dem-file",
@@ -246,7 +246,7 @@ def test_workflow_idempotency(
                 "-uv",
                 "0.2",
                 "-ut",
-                "variable",
+                "constant",
                 "--los-file",
                 str(sample_static_los),
                 "--dem-file",
@@ -368,6 +368,14 @@ def test_different_grid_types(
 
         config_file = work_dir / "runconfig.yaml"
 
+        # The algorithm grid_type must match the staged UNR data type (-ut)
+        from cal_disp.config._algorithm import AlgorithmParameters
+
+        params = AlgorithmParameters.from_yaml(sample_algorithm_params)
+        params.calibration_options.grid_type = grid_type  # type: ignore[assignment]
+        algorithm_params = work_dir / "algorithm_params.yaml"
+        params.to_yaml(algorithm_params, with_comments=False)
+
         result = cli_runner.invoke(
             cli,
             [
@@ -387,7 +395,7 @@ def test_different_grid_types(
                 "--dem-file",
                 str(sample_static_dem),
                 "-a",
-                str(sample_algorithm_params),
+                str(algorithm_params),
                 "-c",
                 str(config_file),
                 "--frame-id",
@@ -460,7 +468,7 @@ def test_output_data_quality(
             "-uv",
             "0.2",
             "-ut",
-            "variable",
+            "constant",
             "--los-file",
             str(sample_static_los),
             "--dem-file",

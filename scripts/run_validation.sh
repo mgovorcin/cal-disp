@@ -74,7 +74,12 @@ DEM_FILE=$(find "${INPUT_DIR}/static_input" -name "*_dem.tif" -type f | head -n 
 LOOKUP_FILE=$(find "${INPUT_DIR}/gnss" -name "grid_latlon_lookup_v*.txt" -type f | head -n 1)
 GNSS_DIR="${INPUT_DIR}/gnss"
 ALGO_FILE="${CONFIGS_DIR}/algorithm_parameters.yaml"
-REFERENCE_NC=$(find "${REFERENCE_DIR}" -name "OPERA_L4_DISP-CAL-S1_*.nc" -type f | head -n 1)
+mapfile -t REFERENCE_NCS < <(find "${REFERENCE_DIR}" -maxdepth 1 -name "OPERA_L4_DISP-CAL-S1_*.nc" -type f)
+if [[ "${#REFERENCE_NCS[@]}" -gt 1 ]]; then
+    echo "ERROR: ${#REFERENCE_NCS[@]} reference products in ${REFERENCE_DIR}; keep exactly one." >&2
+    exit 1
+fi
+REFERENCE_NC="${REFERENCE_NCS[0]:-}"
 
 # Tropo files — sorted by filename gives chronological order (ref then sec)
 mapfile -t TROPO_FILES < <(find "${INPUT_DIR}/tropo" -name "OPERA_L4_TROPO-ZENITH_*.nc" -type f | sort)
@@ -111,6 +116,8 @@ TEST_OUTPUT_DIR="${GOLDEN_DIR}/output"
 CONFIG_FILE="${WORK_DIR}/runconfig.yaml"
 
 rm -rf "${WORK_DIR}"
+# Remove products of earlier validation runs, so the new one is compared
+rm -f "${TEST_OUTPUT_DIR}"/OPERA_L4_DISP-CAL-S1_*.nc "${TEST_OUTPUT_DIR}"/OPERA_L4_DISP-CAL-S1_*.png
 mkdir -p "${WORK_DIR}" "${TEST_OUTPUT_DIR}"
 
 # Generate config

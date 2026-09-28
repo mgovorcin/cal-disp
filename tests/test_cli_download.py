@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from cal_disp.cli.download import burst_bounds, disp_s1, download_group, tropo, unr
@@ -160,6 +161,20 @@ class TestUNRDownload:
             assert result.exit_code == 0
             call_kwargs = mock_download.call_args.kwargs
             assert call_kwargs["margin_deg"] == 1.0
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [([], "constant"), (["--grid-type", "variable"], "variable")],
+    )
+    def test_grid_type(self, cli_runner: CliRunner, tmp_path: Path, args, expected):
+        """Should default to the constant grid and accept --grid-type."""
+        with patch("cal_disp.download.download_unr_grid") as mock_download:
+            result = cli_runner.invoke(
+                unr, ["--frame-id", "8882", "--output-dir", str(tmp_path), *args]
+            )
+
+            assert result.exit_code == 0
+            assert mock_download.call_args.kwargs["grid_type"] == expected
 
     def test_creates_output_directory(self, cli_runner: CliRunner, tmp_path: Path):
         """Should create output directory if it doesn't exist."""

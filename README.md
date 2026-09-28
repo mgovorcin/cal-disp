@@ -77,6 +77,11 @@ cal-disp download disp-s1 --frame-id 8882 -o ./data/disp -n 8
 cal-disp download unr --frame-id 8882 -o ./data/unr
 ```
 
+This stages UNR's `constant` grid (precomputed linear rates, IGS20). For the
+time-variable positions use `--grid-type variable`. Files are named
+`<id>_IGS20_<grid_type>.tenv8`, and the grid type must match both
+`unr_grid_type` in the runconfig and `grid_type` in the algorithm parameters.
+
 **Tropospheric corrections** (optional, one file per DISP acquisition):
 ```bash
 cal-disp download tropo \

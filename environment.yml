@@ -2,6 +2,7 @@ name: my-cal-disp
 channels:
   - conda-forge
 dependencies:
+  - python>=3.11
   # C-extension packages best installed via conda
   - gdal
   - libgdal-netcdf
@@ -10,6 +11,9 @@ dependencies:
   - rioxarray
   - shapely
   - h5py
+  # netCDF4 from conda shares one HDF5 with gdal/h5py; the pip wheel bundles
+  # its own HDF5, which can crash when several threads read files (Venti D23)
+  - netcdf4
 
   # Visualization (conda-forge has better platform support)
   - matplotlib-base

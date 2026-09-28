@@ -8,9 +8,10 @@ import pytest
 import yaml  # type: ignore[import-untyped]
 
 from cal_disp.config._algorithm import (
+    VENTI_OPTIONS,
+    VENTI_OPTIONS_NOT_EXPOSED,
     AlgorithmParameters,
     CalibrationOptions,
-    FFTFilterOptions,
     SavitzkyGolayOptions,
 )
 
@@ -24,7 +25,6 @@ class TestSavitzkyGolayOptions:
 
         assert options.window_length == 51
         assert options.polyorder == 3
-        assert options.deriv == 0
 
     def test_valid_window_length(self):
         """Should accept valid window lengths."""
@@ -42,64 +42,12 @@ class TestSavitzkyGolayOptions:
         with pytest.raises(ValueError, match="greater than or equal to 0"):
             SavitzkyGolayOptions(polyorder=-1)
 
-    def test_rejects_negative_deriv(self):
-        """Should reject negative derivative order."""
-        with pytest.raises(ValueError, match="greater than or equal to 0"):
-            SavitzkyGolayOptions(deriv=-1)
-
     def test_all_fields_specified(self):
         """Should accept all fields when specified."""
-        options = SavitzkyGolayOptions(window_length=99, polyorder=5, deriv=1)
+        options = SavitzkyGolayOptions(window_length=99, polyorder=5)
 
         assert options.window_length == 99
         assert options.polyorder == 5
-        assert options.deriv == 1
-
-
-class TestFFTFilterOptions:
-    """Tests for FFT filter options."""
-
-    def test_defaults(self):
-        """Should have expected default values."""
-        options = FFTFilterOptions()
-
-        assert options.gaussian_sigma == pytest.approx(0.1)
-        assert options.butterworth_order == 4
-        assert options.spatial_domain is False
-        assert options.taper_edges is True
-        assert options.taper_width == pytest.approx(0.05)
-
-    def test_rejects_non_positive_sigma(self):
-        """Should reject non-positive gaussian_sigma."""
-        with pytest.raises(ValueError):
-            FFTFilterOptions(gaussian_sigma=0)
-
-    def test_rejects_butterworth_order_below_1(self):
-        """Should reject butterworth_order below 1."""
-        with pytest.raises(ValueError, match="greater than or equal to 1"):
-            FFTFilterOptions(butterworth_order=0)
-
-    def test_taper_width_bounds(self):
-        """Should reject taper_width outside [0, 0.5]."""
-        with pytest.raises(ValueError):
-            FFTFilterOptions(taper_width=0.6)
-        with pytest.raises(ValueError):
-            FFTFilterOptions(taper_width=-0.1)
-
-    def test_custom_values(self):
-        """Should accept custom values."""
-        options = FFTFilterOptions(
-            gaussian_sigma=0.5,
-            butterworth_order=6,
-            spatial_domain=True,
-            taper_edges=False,
-            taper_width=0.1,
-        )
-
-        assert options.gaussian_sigma == pytest.approx(0.5)
-        assert options.butterworth_order == 6
-        assert options.spatial_domain is True
-        assert options.taper_edges is False
 
 
 class TestCalibrationOptions:
@@ -111,8 +59,8 @@ class TestCalibrationOptions:
 
         assert options.grid_type == "constant"
         assert options.reference_frame == "IGS20"
-        assert options.starting_year == pytest.approx(2014.0)
         assert options.unwrap_error_correction is True
+        assert options.apply_solid_earth_tide_correction is True
         assert options.window_size_meters == pytest.approx(30000.0)
         assert options.posting_meters == pytest.approx(30.0)
         assert options.downsample_factor == 6
@@ -178,11 +126,37 @@ class TestCalibrationOptions:
 
         assert options.savitzky_golay.window_length == 101
 
-    def test_nested_fft_filter(self):
-        """Should accept nested FFTFilterOptions."""
-        options = CalibrationOptions(fft_filter=FFTFilterOptions(gaussian_sigma=0.5))
+    def test_rejects_options_removed_from_venti(self):
+        """Old configs with options Venti dropped should fail loudly."""
+        for removed in ({"starting_year": 2014.0}, {"fft_filter": {}}):
+            with pytest.raises(ValueError, match="Extra inputs"):
+                CalibrationOptions(**removed)
 
-        assert options.fft_filter.gaussian_sigma == pytest.approx(0.5)
+    def test_to_venti(self):
+        """Should carry every mapped option over to Venti's CalibrationOptions."""
+        options = CalibrationOptions(
+            grid_type="variable",
+            unwrap_error_correction=False,
+            apply_solid_earth_tide_correction=False,
+            event_mask_buffer_pixels=3,
+            residual_outlier_mad_threshold=4.0,
+            weight_fit_by_gnss_uncertainty=True,
+            calibration_surface_smoothing_sigma=0,
+            savitzky_golay=SavitzkyGolayOptions(window_length=31, polyorder=2),
+        )
+        venti = options.to_venti()
+
+        assert venti.model_dump(include=VENTI_OPTIONS) == options.model_dump(
+            include=VENTI_OPTIONS
+        )
+
+    def test_venti_options_all_mapped(self):
+        """Every Venti calibration option is mapped or deliberately not exposed."""
+        from venti.workflow.config import CalibrationOptions as VentiOptions
+
+        assert set(VentiOptions.model_fields) == (
+            VENTI_OPTIONS | VENTI_OPTIONS_NOT_EXPOSED
+        )
 
     def test_rejects_non_positive_window_size(self):
         """Should reject non-positive window_size_meters."""
