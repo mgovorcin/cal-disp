@@ -52,6 +52,9 @@ class CalibrationOptions(YamlModel):
         GNSS reference frame, ``'IGS20'`` or ``'IGS14'``.
     unwrap_error_correction : bool
         Apply watershed-based unwrap-error correction before fitting.
+    apply_tropo_correction : bool
+        Apply the tropospheric correction when the runconfig lists tropo
+        files; ``False`` ignores them.
     apply_solid_earth_tide_correction : bool
         Remove the product's ``/corrections/solid_earth_tide`` before the fit
         (UNR GNSS already has it removed) and add it back to the surface.
@@ -115,6 +118,15 @@ class CalibrationOptions(YamlModel):
         description=(
             "Apply watershed-based unwrap-error correction to the displacement "
             "field before fitting the calibration surface."
+        ),
+    )
+
+    apply_tropo_correction: bool = Field(
+        default=True,
+        description=(
+            "Apply the tropospheric correction when the runconfig lists tropo "
+            "files (removed before the fit and added back to the surface). "
+            "false ignores the files."
         ),
     )
 
@@ -265,6 +277,7 @@ VENTI_OPTIONS = {
     "grid_type",
     "reference_frame",
     "unwrap_error_correction",
+    "apply_tropo_correction",
     "apply_solid_earth_tide_correction",
     "window_size_meters",
     "posting_meters",
@@ -278,9 +291,8 @@ VENTI_OPTIONS = {
     "calibration_surface_smoothing_sigma",
     "savitzky_golay",
 }
-# Venti options cal-disp does not expose: tropo is applied when the runconfig
-# lists tropo files, and each run has its own GNSS cache.
-VENTI_OPTIONS_NOT_EXPOSED = {"apply_tropo_correction", "recompute_gnss"}
+# Venti options cal-disp does not expose: each run has its own GNSS cache.
+VENTI_OPTIONS_NOT_EXPOSED = {"recompute_gnss"}
 
 
 class AlgorithmParameters(YamlModel):

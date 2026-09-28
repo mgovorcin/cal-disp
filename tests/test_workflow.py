@@ -317,3 +317,68 @@ def test_gnss_field_on_fit_grid_matches_full_resolution(
     np.testing.assert_allclose(coarse[inner], full[inner], atol=0.005 * spread)
     # In the 2-pixel edge band the edge value is held
     np.testing.assert_allclose(coarse, full, atol=0.03 * spread)
+
+
+@pytest.mark.parametrize("apply_tropo", [True, False])
+def test_run_calibration_tropo_toggle(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_static_dem: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    monkeypatch,
+    apply_tropo: bool,
+):
+    """apply_tropo_correction=False ignores the tropo files in the runconfig."""
+    import rasterio
+
+    from cal_disp.prep import tropo
+
+    prepared = []
+
+    def _fake_prepare(**_kwargs):
+        # Differential delay of 1 cm everywhere (sec - ref)
+        with rasterio.open(sample_static_los) as src:
+            profile = src.profile | {"count": 1, "dtype": "float32"}
+        paths = []
+        for name, value in (("ref", 0.0), ("sec", 0.01)):
+            path = tmp_path / f"{name}_tropo.tif"
+            with rasterio.open(path, "w", **profile) as dst:
+                dst.write(np.full((1, 200, 200), value, dtype=np.float32))
+            paths.append(path)
+        prepared.append(paths)
+        return tuple(paths)
+
+    monkeypatch.setattr(tropo, "prepare_troposphere_correction", _fake_prepare)
+    lookup_file, tenv8_dir = sample_unr_data
+    out_path = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        dem_file=sample_static_dem,
+        reference_tropo_files=[tmp_path / "ref.nc"],
+        secondary_tropo_files=[tmp_path / "sec.nc"],
+        algorithm_parameters=AlgorithmParameters(
+            calibration_options=CalibrationOptions(apply_tropo_correction=apply_tropo)
+        ),
+    )
+
+    corrections = list(captured_core[0]["corrections"])
+    with xr.open_dataset(out_path) as ds:
+        applied = ds["calibration"].attrs["corrections_applied"]
+    with xr.open_dataset(out_path, group="metadata") as meta:
+        atmospheric = str(meta["ceos_atmospheric_phase_correction"].values)
+    if apply_tropo:
+        assert len(prepared) == 1
+        (correction,) = corrections
+        np.testing.assert_allclose(correction, 0.01)
+        assert applied == "troposphere"
+        assert atmospheric == "tropospheric"
+    else:
+        assert prepared == []
+        assert corrections == []
+        assert applied == "none"
+        assert atmospheric == "none"
