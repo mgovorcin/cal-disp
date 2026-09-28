@@ -1,15 +1,8 @@
-"""Calibration workflow for OPERA DISP-S1 products.
+"""Calibrate one OPERA DISP-S1 product against GNSS, using Venti.
 
-Orchestrates GNSS-based calibration using Venti as the processing back-end:
-
-1. Load the DISP product and extract spatial metadata.
-2. Set up a ``GNSSReference`` pointing at pre-staged UNR tenv8 files.
-3. Load the 3-band LOS (east / north / up) GeoTIFF.
-4. Compute the GNSS LOS reference (constant rates or epoch displacement).
-5. Estimate the calibration surface with ``venti.estimate_calibration_surface``
-   (tropospheric and solid Earth tide corrections removed before the fit and
-   added back, reference pixel, event masks, windowed fit).
-6. Package the result into a ``CalProduct`` NetCDF.
+Load the product, compute the GNSS LOS field from pre-staged UNR files,
+estimate the calibration surface (``venti.estimate_calibration_surface``)
+and write a ``CalProduct``.
 """
 
 from __future__ import annotations
@@ -39,12 +32,9 @@ def _build_event_mask(
     event_db: Path | None,
     mask_dir: Path,
 ) -> Path | None:
-    """Generate and combine event/deformation masks from GeoJSON database.
+    """Build one mask GeoTIFF (1 = valid) from the GeoJSON databases.
 
-    For each available GeoJSON, selects only features whose ``frame_id``
-    and ``event_date`` overlap the DISP product epoch, and ANDs the results
-    into a single combined mask GeoTIFF (1 = valid, 0 = masked).
-    Returns ``None`` when no database is provided.
+    Returns ``None`` if no database is given.
     """
     from cal_disp.prep.generate_event_mask import generate_event_mask
 
@@ -82,10 +72,7 @@ def _build_event_mask(
 
 
 def _read_wavelength_m(disp_file: Path) -> float:
-    """Read the radar wavelength in meters from a DISP product file.
-
-    Returns ~0.05546 for Sentinel-1 C-band.
-    """
+    """Read the radar wavelength (m) from a DISP product."""
     from netCDF4 import Dataset  # type: ignore[import-untyped]
 
     try:
@@ -118,7 +105,7 @@ def _date_to_decimal_year(dt: datetime) -> float:
 def _load_los_bands(
     los_file: Path,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Load a 3-band LOS GeoTIFF and return (east, north, up) arrays."""
+    """Read the (east, north, up) bands of a LOS GeoTIFF."""
     with rasterio.open(los_file) as src:
         if src.count < 3:
             raise ValueError(
@@ -134,7 +121,7 @@ def _load_los_bands(
 def _staged_station_files(
     unr_timeseries_dir: Path, reference_frame: str, grid_type: str
 ) -> list[Path]:
-    """Pre-staged UNR station files of one reference frame and grid type."""
+    """Staged UNR files of one reference frame and grid type."""
     return sorted(unr_timeseries_dir.glob(f"*_{reference_frame}_{grid_type}.tenv8"))
 
 
@@ -151,13 +138,9 @@ def _gnss_los_fields(
 ) -> tuple[np.ndarray, np.ndarray]:
     """GNSS LOS displacement and its uncertainty (m) on the product grid.
 
-    The fit only sees the GNSS field averaged over ``factor x factor`` blocks
-    (Venti downsamples it like the displacement), and the field is smooth
-    (interpolated between stations ~20 km apart). So for ``factor > 1`` it
-    is computed at the centre pixel of each block, with the LOS taken at
-    that pixel, and interpolated back (`_upsample_centres`): on NYC F08622
-    (factor 6) the calibration changed by <= 0.2 mm while the GNSS step went
-    from ~93 min to ~12 s. ``factor == 1`` computes it at full resolution.
+    With ``factor > 1`` both are computed at the block centres of the fit grid
+    and interpolated back: the fit only sees block averages anyway, and it is
+    much faster (NYC F08622: <= 0.01 mm change, ~93 min -> seconds).
     """
     from venti.gnss import compute_gnss_los, compute_gnss_los_std
 
@@ -189,11 +172,9 @@ def _gnss_los_fields(
 def _upsample_centres(
     field: np.ndarray, xc: np.ndarray, yc: np.ndarray, x: np.ndarray, y: np.ndarray
 ) -> np.ndarray:
-    """Bilinearly interpolate `field` on the regular grid (`yc`, `xc`) to (`y`, `x`).
+    """Bilinear interpolation from grid (`yc`, `xc`) to (`y`, `x`).
 
-    Uses the real coordinates of the samples (block centres), so the result is
-    not shifted; beyond the outermost samples (half a block) the edge value is
-    kept.
+    Beyond the outermost samples the edge value is kept.
     """
 
     def _weights(src: np.ndarray, dst: np.ndarray):
@@ -217,10 +198,8 @@ def _find_reference_point(
 ) -> tuple[int, int]:
     """Choose the reference pixel ``(row, col)`` for one product.
 
-    Venti's rule (``opera_utils.disp.rebase_reference.find_reference_point``:
-    the pixel nearest the centre of the highest-quality pixels) applied to
-    this product's temporal coherence, restricted to valid pixels. The fit is
-    nearly shift-invariant, so the choice mostly guarantees a valid pixel.
+    Venti's rule (``opera_utils`` ``find_reference_point``) applied to the
+    product's temporal coherence over valid pixels.
     """
     from opera_utils.disp import rebase_reference
 
@@ -255,7 +234,7 @@ def _find_reference_point(
     try:
         row, col = rebase_reference.find_reference_point(quality_file)
     except ValueError:
-        # No pixel above the minimum quality: take the best valid one
+        # Nothing above the minimum quality: take the best pixel
         row, col = np.unravel_index(np.argmax(quality), quality.shape)
     ref_point = (int(row), int(col))
     logger.info("Reference pixel (row, col): %s", ref_point)
@@ -270,24 +249,20 @@ def _setup_gnss_reference(
     reference_frame: str,
     grid_type: str,
 ):
-    """Initialise a ``GNSSReference`` reusing pre-staged UNR files.
+    """Create a ``GNSSReference`` that uses the pre-staged UNR files.
 
-    Cal-disp pre-stages UNR tenv8 files via ``cal-disp download unr``, named
-    ``<id>_<frame>_<grid_type>.tenv8`` like Venti's own downloads. Venti's
-    ``GNSSReference.download_stations()`` skips any file already present in
-    ``output_dir``, so the staged files of this frame and grid type are
-    symlinked into a dedicated gnss working directory before calling it.
+    The staged files are symlinked into `gnss_dir`, where Venti's
+    ``download_stations()`` finds them instead of downloading.
     """
     from venti.gnss import GNSSReference
 
     gnss_dir.mkdir(parents=True, exist_ok=True)
 
-    # Venti expects the lookup at output_dir / "grid_latlon_lookup.txt"
+    # Venti's expected lookup name
     lookup_link = gnss_dir / "grid_latlon_lookup.txt"
     if not lookup_link.exists() and unr_grid_latlon_file.exists():
         lookup_link.symlink_to(unr_grid_latlon_file.resolve())
 
-    # Symlink pre-staged tenv8 files so download_stations() uses them directly
     staged = _staged_station_files(unr_timeseries_dir, reference_frame, grid_type)
     if not staged:
         msg = (
@@ -301,7 +276,7 @@ def _setup_gnss_reference(
         if not link.exists():
             link.symlink_to(tenv8.resolve())
 
-    # Extract UTM bounds (south, north, west, east) from the DISP product
+    # UTM bounds (south, north, west, east)
     b = disp_product.get_bounds()
     bounds = (b["bottom"], b["top"], b["left"], b["right"])
     utm_epsg = disp_product.get_epsg()
@@ -319,13 +294,9 @@ def _setup_gnss_reference(
 
 
 def _in_scratch_temp_dir(func):
-    """Run `func` with all temporary files under ``<work_directory>/tmp``.
+    """Run `func` with all temp files (Python and GDAL) in ``<work_directory>/tmp``.
 
-    Python ``tempfile`` and GDAL work files (``CPL_TMPDIR``) otherwise go to
-    the system temp dir or the current directory, which may not be writable
-    in a PGE container (GDAL then failed inside Venti's gap filling). Uses
-    Venti's ``scratch_temp_dir``: a private ``tmp/run_*`` folder, removed
-    afterwards, with the previous settings restored.
+    The system temp dir or cwd may not be writable in a PGE container.
     """
     signature = inspect.signature(func)
 
@@ -398,35 +369,24 @@ def run_calibration(
     algorithm_parameters : AlgorithmParameters, optional
         Algorithm configuration.  Defaults are used when ``None``.
     dem_file : Path, optional
-        DEM GeoTIFF.  Required when tropospheric correction files are provided.
-    reference_tropo_files : list[Path], optional
-        OPERA TROPO-ZENITH NetCDF files for the reference date (1–2 files for
-        temporal interpolation).  When provided together with
-        ``secondary_tropo_files``, a differential LOS correction
-        (secondary − reference) is applied to the displacement before surface
-        fitting.
-    secondary_tropo_files : list[Path], optional
-        OPERA TROPO-ZENITH NetCDF files for the secondary date (1–2 files for
-        temporal interpolation).
+        DEM GeoTIFF; required with tropo files.
     los_file : Path
-        3-band LOS GeoTIFF (band 1 = east, 2 = north, 3 = up unit vectors).
+        LOS GeoTIFF (bands: east, north, up).
+    reference_tropo_files, secondary_tropo_files : list[Path], optional
+        OPERA TROPO-ZENITH files (1-2 per date). With both, the differential
+        tropospheric delay is removed before the fit.
     defo_area_db_json : Path, optional
-        GeoJSON of continuous deformation areas to exclude from calibration.
-        Features are filtered by ``frame_id`` and ``event_date`` matching the
-        DISP product epoch.
+        GeoJSON of deformation areas to exclude from the fit.
     event_db_json : Path, optional
-        GeoJSON of earthquake/volcanic events to exclude from calibration.
-        Same filtering logic as ``defo_area_db_json``.
+        GeoJSON of events to exclude from the fit (within the epoch only).
     block_shape : tuple[int, int]
-        Dask block shape — reserved for future parallelisation.
+        Unused (reserved for Dask).
     n_workers : int
-        Dask workers — reserved for future parallelisation.
+        Unused (reserved for Dask).
     threads_per_worker : int
-        Threads per Dask worker, forwarded to the windowed fit as ``n_jobs``.
+        Parallel jobs for the windowed fit.
     work_directory : Path, optional
-        Scratch directory for intermediate files and GNSS cache (default
-        ``output_dir / "scratch"``). All temporary files, including GDAL's,
-        go to a private ``tmp/run_*`` folder inside it, deleted at the end.
+        Scratch directory, by default ``output_dir / "scratch"``.
     pge_runconfig : str, optional
         Serialised PGE run-config YAML stored in product metadata.
     calibration_reference_name : str
@@ -434,16 +394,15 @@ def run_calibration(
     calibration_reference_version : str
         Version string of the calibration reference dataset.
     calibration_reference_type : str, optional
-        ``'constant'`` or ``'variable'``. Must match the calibration
-        ``grid_type``; defaults to it.
+        ``'constant'`` or ``'variable'``; must match ``grid_type`` (default).
     calibration_reference_reference_frame : str
         GNSS reference frame (e.g. ``'IGS20'``).
     platform_id : str
         Satellite platform identifier (e.g. ``'S1A'``).
     absolute_orbit_number : int
-        Absolute orbit number (extracted from DISP product in future).
+        Absolute orbit number.
     track_number : int
-        Track number (extracted from DISP product in future).
+        Track number.
     instrument_name : str
         SAR instrument name.
     look_direction : str
@@ -557,20 +516,16 @@ def run_calibration(
         _date_to_decimal_year(disp_product.secondary_date),
     )
 
-    # A single DISP file encodes one (ref_date, sec_date) pair: 2-D (y, x).
     disp_2d = ds_disp.displacement.values.astype(np.float32)
 
-    # Valid pixels
+    # Valid pixels (both masks: 1 = valid)
     mask = ~np.isnan(disp_2d)
     if "recommended_mask" in ds_disp:
-        # recommended_mask convention: 1 = valid/recommended, 0 = invalid
         mask &= ds_disp.recommended_mask.values.astype(bool)
     if "water_mask" in ds_disp:
-        # water_mask convention: 1 = land/valid, 0 = water/invalid
         mask &= ds_disp.water_mask.values.astype(bool)
 
-    # Event / deformation areas (True = valid): Venti fills them from their
-    # neighbours before the fit, and the surface still covers them.
+    # Event areas (True = valid) are filled from neighbours before the fit
     event_mask = None
     if defo_area_db_json is not None or event_db_json is not None:
         event_mask_file = _build_event_mask(
@@ -584,9 +539,8 @@ def run_calibration(
                 event_mask = _src.read(1).astype(bool)
             logger.info("Event mask: %d pixels to fill", int((~event_mask).sum()))
 
-    # Corrections for signals GNSS does not contain: removed before the fit
-    # and added back to the surface (Venti), so the surface is what to
-    # subtract from the raw /displacement.
+    # Signals GNSS does not contain: removed before the fit, added back to
+    # the surface
     corrections: list[np.ndarray] = []
     _tropo_applied = False
     if reference_tropo_files and secondary_tropo_files:
@@ -610,7 +564,7 @@ def run_calibration(
             ref_tropo = _src.read(1).astype(np.float32)
         with rasterio.open(sec_tropo_path) as _src:
             sec_tropo = _src.read(1).astype(np.float32)
-        corrections.append(sec_tropo - ref_tropo)  # differential LOS delay (m)
+        corrections.append(sec_tropo - ref_tropo)
         _tropo_applied = True
 
     _set_applied = False
@@ -672,8 +626,6 @@ def run_calibration(
         raise
     cal_surface_m = result.surface.astype(np.float32)
 
-    # Insert time dimension
-
     coords = {"time": time, "y": y, "x": x}
     calibration = xr.DataArray(
         cal_surface_m[np.newaxis, :, :],
@@ -682,7 +634,6 @@ def run_calibration(
         attrs={
             "units": "meters",
             "long_name": "calibration_correction",
-            # Removed before the fit and included in the surface
             "corrections_applied": (
                 ", ".join(
                     name
@@ -696,12 +647,8 @@ def run_calibration(
             ),
         },
     )
-    # TODO: discuss and improve. This is the uncertainty of the GNSS reference
-    # (UNR sigmas projected to LOS and interpolated per pixel), NOT of the
-    # fitted surface, which averages GNSS over each window and is smoothed.
-    # Venti's RBF interpolation of the station sigmas overshoots between
-    # stations (negative at ~10% of NYC F08622 pixels), so clip at 0; the fit
-    # weighting above uses Venti's values unchanged (1/sigma^2).
+    # TODO: improve. GNSS reference uncertainty, not that of the fitted
+    # surface. Clipped at 0: Venti's RBF interpolation can overshoot below 0.
     calibration_std = xr.DataArray(
         np.clip(gnss_los_std, 0, None)[np.newaxis, :, :],
         coords=coords,
@@ -719,7 +666,7 @@ def run_calibration(
         },
     )
 
-    # Coarse 3-D velocity model (placeholder — DecompositionWorkflow TBD)
+    # 3-D velocity model: zero placeholder until decomposition exists
     coarse_y = y[::167]
     coarse_x = x[::167]
     coarse_shape = (len(time), len(coarse_y), len(coarse_x))
@@ -739,7 +686,6 @@ def run_calibration(
         "up_down": _zero_da("up_down_velocity", "meters/year"),
     }
 
-    # Software version strings
     def _pkg_version(name: str) -> str:
         try:
             return importlib.metadata.version(name)
@@ -749,7 +695,6 @@ def run_calibration(
     cal_disp_version = _pkg_version("cal-disp")
     venti_version = _pkg_version("venti")
 
-    # Serialise algorithm parameters to YAML string for metadata
     _buf = StringIO()
     algorithm_parameters.to_yaml(_buf, with_comments=False)
     algorithm_parameters_yaml = _buf.getvalue()
@@ -763,7 +708,7 @@ def run_calibration(
         calibration_std=calibration_std,
         spatial_ref=spatial_ref,
         global_metadata={
-            # GNSS field is sec - ref, i.e. zero at the product reference date
+            # GNSS field is zero at the reference date
             "gnss_reference_epoch": f"{ref_decimal:.4f}",
             "auxiliary_model_3d_resolution": "5km",
             "calibration_resolution": f"{int(x_spacing)}m",
