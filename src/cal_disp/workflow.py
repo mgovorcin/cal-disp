@@ -374,7 +374,8 @@ def run_calibration(
         LOS GeoTIFF (bands: east, north, up).
     reference_tropo_files, secondary_tropo_files : list[Path], optional
         OPERA TROPO-ZENITH files (1-2 per date). With both, the differential
-        tropospheric delay is removed before the fit.
+        tropospheric delay is removed before the fit (unless
+        ``apply_tropo_correction`` is false).
     defo_area_db_json : Path, optional
         GeoJSON of deformation areas to exclude from the fit.
     event_db_json : Path, optional
@@ -543,7 +544,11 @@ def run_calibration(
     # the surface
     corrections: list[np.ndarray] = []
     _tropo_applied = False
-    if reference_tropo_files and secondary_tropo_files:
+    use_tropo = bool(reference_tropo_files and secondary_tropo_files)
+    if use_tropo and not cal.apply_tropo_correction:
+        logger.info("apply_tropo_correction=false; ignoring the tropo files")
+        use_tropo = False
+    if use_tropo:
         if dem_file is None:
             raise ValueError(
                 "dem_file is required when tropospheric correction files are provided"

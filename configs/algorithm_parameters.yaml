@@ -23,6 +23,12 @@ calibration_options:
   #   Type: boolean.
   unwrap_error_correction: true
 
+  # Apply the tropospheric correction when the runconfig lists tropo files
+  # (removed before the fit and added back to the calibration surface).
+  # false ignores the tropo files.
+  #   Type: boolean.
+  apply_tropo_correction: true
+
   # Remove the product's /corrections/solid_earth_tide before the fit (UNR
   # GNSS already has it removed) and add it back to the calibration surface.
   # A product without the layer is calibrated without it (warning).

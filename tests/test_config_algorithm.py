@@ -60,6 +60,7 @@ class TestCalibrationOptions:
         assert options.grid_type == "constant"
         assert options.reference_frame == "IGS20"
         assert options.unwrap_error_correction is True
+        assert options.apply_tropo_correction is True
         assert options.apply_solid_earth_tide_correction is True
         assert options.window_size_meters == pytest.approx(30000.0)
         assert options.posting_meters == pytest.approx(30.0)
@@ -137,6 +138,7 @@ class TestCalibrationOptions:
         options = CalibrationOptions(
             grid_type="variable",
             unwrap_error_correction=False,
+            apply_tropo_correction=False,
             apply_solid_earth_tide_correction=False,
             event_mask_buffer_pixels=3,
             residual_outlier_mad_threshold=4.0,
