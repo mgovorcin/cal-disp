@@ -24,7 +24,7 @@
 #       --end        2016-08-31 \
 #       --static-dir /path/to/static_layers \
 #       --algo-params configs/algorithm_parameters.yaml \
-#       --unr-version 0.2 \
+#       --unr-version 0.3 \
 #       --unr-type constant \
 #       --skip-tropo
 #
@@ -32,7 +32,7 @@
 # ------------------------------------
 #   golden/
 #     disp/           downloaded OPERA_L3_DISP-S1_*.nc
-#     gnss/           grid_latlon_lookup.txt + *.tenv8
+#     gnss/           grid_latlon_lookup_v<version>.txt + <id>_IGS20_<type>.tenv8
 #     los.tif         (symlinked from --static-dir)
 #     dem.tif         (symlinked from --static-dir)
 #     algorithm_parameters.yaml
@@ -49,7 +49,7 @@ set -euo pipefail
 FRAME_ID="8882"
 START_DATE="2016-07-01"
 END_DATE="2016-08-31"
-UNR_VERSION="0.2"
+UNR_VERSION="0.3"  # the constant grid exists only for 0.3
 UNR_TYPE="constant"
 SKIP_TROPO=false
 OUTPUT_DIR="${CAL_DISP_TEST_DATA:-}"
@@ -107,6 +107,13 @@ if [[ ! -f "${ALGO_PARAMS}" ]]; then
 fi
 
 ALGO_PARAMS="$(realpath "${ALGO_PARAMS}")"
+
+# The staged UNR product must match the algorithm's grid_type
+ALGO_GRID_TYPE=$(sed -n 's/^[[:space:]]*grid_type:[[:space:]]*\([a-z]*\).*/\1/p' "${ALGO_PARAMS}")
+if [[ "${ALGO_GRID_TYPE}" != "${UNR_TYPE}" ]]; then
+    echo "ERROR: --unr-type ${UNR_TYPE} but grid_type in ${ALGO_PARAMS} is '${ALGO_GRID_TYPE}'." >&2
+    exit 1
+fi
 OUTPUT_DIR="$(realpath "${OUTPUT_DIR}")"
 
 GOLDEN_DIR="${OUTPUT_DIR}/golden"
@@ -145,8 +152,9 @@ echo "  using: $(basename "${DISP_FILE}")"
 # Step 2: Download UNR GNSS data
 echo "[2/5] Downloading UNR GNSS data..."
 cal-disp download unr \
-    --frame-id "${FRAME_ID}" \
-    -o         "${GOLDEN_DIR}/gnss"
+    --frame-id  "${FRAME_ID}" \
+    --grid-type "${UNR_TYPE}" \
+    -o          "${GOLDEN_DIR}/gnss"
 
 UNR_LOOKUP=$(find "${GOLDEN_DIR}/gnss" -name "grid_latlon_lookup*.txt" -type f | head -n 1)
 if [[ -z "${UNR_LOOKUP}" ]]; then
