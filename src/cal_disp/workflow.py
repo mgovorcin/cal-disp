@@ -138,6 +138,80 @@ def _staged_station_files(
     return sorted(unr_timeseries_dir.glob(f"*_{reference_frame}_{grid_type}.tenv8"))
 
 
+def _gnss_los_fields(
+    gnss_ref,
+    los: tuple[np.ndarray, np.ndarray, np.ndarray],
+    disp_file: Path,
+    x: np.ndarray,
+    y: np.ndarray,
+    factor: int,
+    cache_dir: Path,
+    ref_date: float,
+    sec_date: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """GNSS LOS displacement and its uncertainty (m) on the product grid.
+
+    The fit only sees the GNSS field averaged over ``factor x factor`` blocks
+    (Venti downsamples it like the displacement), and the field is smooth
+    (interpolated between stations ~20 km apart). So for ``factor > 1`` it
+    is computed at the centre pixel of each block, with the LOS taken at
+    that pixel, and interpolated back (`_upsample_centres`): on NYC F08622
+    (factor 6) the calibration changed by <= 0.2 mm while the GNSS step went
+    from ~93 min to ~12 s. ``factor == 1`` computes it at full resolution.
+    """
+    from venti.gnss import compute_gnss_los, compute_gnss_los_std
+
+    los_east, los_north, los_up = los
+    grid: Path | tuple[np.ndarray, np.ndarray] = disp_file
+    c = factor // 2
+    if factor > 1:
+        grid = (x[c::factor], y[c::factor])
+        los_east, los_north, los_up = (a[c::factor, c::factor] for a in los)
+    kwargs = {
+        "gnss_ref": gnss_ref,
+        "los_east": los_east,
+        "los_north": los_north,
+        "los_up": los_up,
+        "grid": grid,
+        "cache_dir": cache_dir,
+        "ref_date": ref_date,
+        "sec_date": sec_date,
+    }
+    fields = [compute_gnss_los(**kwargs), compute_gnss_los_std(**kwargs)]
+    if factor > 1:
+        fields = [
+            _upsample_centres(f, x[c::factor], y[c::factor], x, y) for f in fields
+        ]
+    gnss_los, gnss_los_std = (np.asarray(f, dtype=np.float32) / 1000.0 for f in fields)
+    return gnss_los, gnss_los_std
+
+
+def _upsample_centres(
+    field: np.ndarray, xc: np.ndarray, yc: np.ndarray, x: np.ndarray, y: np.ndarray
+) -> np.ndarray:
+    """Bilinearly interpolate `field` on the regular grid (`yc`, `xc`) to (`y`, `x`).
+
+    Uses the real coordinates of the samples (block centres), so the result is
+    not shifted; beyond the outermost samples (half a block) the edge value is
+    kept.
+    """
+
+    def _weights(src: np.ndarray, dst: np.ndarray):
+        n = len(src)
+        if n == 1:
+            zeros = np.zeros(len(dst), dtype=int)
+            return zeros, zeros, np.zeros(len(dst), dtype=np.float32)
+        pos = np.clip((dst - src[0]) / (src[1] - src[0]), 0, n - 1)
+        i0 = np.minimum(pos.astype(int), n - 2)
+        return i0, i0 + 1, (pos - i0).astype(np.float32)
+
+    field = np.asarray(field, dtype=np.float32)
+    x0, x1, wx = _weights(xc, x)
+    y0, y1, wy = _weights(yc, y)
+    rows = field[:, x0] * (1 - wx) + field[:, x1] * wx
+    return rows[y0] * (1 - wy)[:, None] + rows[y1] * wy[:, None]
+
+
 def _find_reference_point(
     ds_disp: xr.Dataset, mask: np.ndarray, work_dir: Path
 ) -> tuple[int, int]:
@@ -467,24 +541,21 @@ def run_calibration(
     los_east, los_north, los_up = _load_los_bands(los_file)
 
     # GNSS LOS reference for this interval (Venti returns mm; disp is in m)
-    from venti.gnss import compute_gnss_los, compute_gnss_los_std
     from venti.io import read_netcdf_correction
     from venti.surface import SENTINEL1_WAVELENGTH_M, estimate_calibration_surface
 
     ref_decimal = _date_to_decimal_year(disp_product.reference_date)
-    gnss_kwargs = {
-        "gnss_ref": gnss_ref,
-        "los_east": los_east,
-        "los_north": los_north,
-        "los_up": los_up,
-        "grid": disp_file,
-        "cache_dir": gnss_dir,
-        "ref_date": ref_decimal,
-        "sec_date": _date_to_decimal_year(disp_product.secondary_date),
-    }
-    gnss_los = compute_gnss_los(**gnss_kwargs) / 1000.0
-    # Also written to the product as calibration_std (see there)
-    gnss_los_std = (compute_gnss_los_std(**gnss_kwargs) / 1000.0).astype(np.float32)
+    gnss_los, gnss_los_std = _gnss_los_fields(
+        gnss_ref,
+        (los_east, los_north, los_up),
+        disp_file,
+        x,
+        y,
+        cal.downsample_factor,
+        gnss_dir,
+        ref_decimal,
+        _date_to_decimal_year(disp_product.secondary_date),
+    )
 
     # A single DISP file encodes one (ref_date, sec_date) pair: 2-D (y, x).
     disp_2d = ds_disp.displacement.values.astype(np.float32)

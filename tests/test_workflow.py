@@ -239,9 +239,9 @@ def test_run_calibration_clips_negative_std(
     """RBF-interpolated GNSS sigmas can overshoot below 0: never written."""
     import venti.gnss
 
-    def _overshooting_std(**_kwargs):
-        std = np.full((200, 200), 0.5, dtype=np.float32)  # mm
-        std[:50] = -0.3
+    def _overshooting_std(**kwargs):
+        std = np.full(kwargs["los_east"].shape, 0.5, dtype=np.float32)  # mm
+        std[: len(std) // 2] = -0.3
         return std
 
     monkeypatch.setattr(venti.gnss, "compute_gnss_los_std", _overshooting_std)
@@ -256,5 +256,64 @@ def test_run_calibration_clips_negative_std(
 
     with xr.open_dataset(out_path) as ds:
         std = ds["calibration_std"].values[0]
-    np.testing.assert_array_equal(std[:50], 0)
-    np.testing.assert_allclose(std[50:], 0.0005)
+    assert std.min() == 0  # negative sigmas clipped, not written
+    np.testing.assert_array_equal(std[:80], 0)
+    np.testing.assert_allclose(std[120:], 0.0005)
+
+
+def test_gnss_field_on_fit_grid_matches_full_resolution(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+):
+    """With downsample_factor > 1 the GNSS field is computed on the coarse
+    fit grid and upsampled; it must match the full-resolution field."""
+    import rasterio
+
+    # Real LOS rasters vary smoothly; the fixture's is random per pixel, which
+    # would change the LOS each station samples on the coarse grid.
+    smooth_los = tmp_path / "smooth_los.tif"
+    with rasterio.open(sample_static_los) as src:
+        profile = src.profile
+    xx = np.linspace(0, 1, 200, dtype=np.float32)[None, :].repeat(200, axis=0)
+    east, north = -0.6 + 0.05 * xx, np.full_like(xx, -0.1)
+    up = np.sqrt(1 - east**2 - north**2)
+    with rasterio.open(smooth_los, "w", **profile) as dst:
+        dst.write(np.stack([east, north, up]))
+
+    lookup_file, tenv8_dir = sample_unr_data
+    for factor in (1, 4):
+        run_calibration(
+            disp_file=sample_disp_product,
+            unr_grid_latlon_file=lookup_file,
+            unr_timeseries_dir=tenv8_dir,
+            output_dir=tmp_path / f"out{factor}",
+            los_file=smooth_los,
+            algorithm_parameters=AlgorithmParameters(
+                calibration_options=CalibrationOptions(
+                    grid_type="variable", downsample_factor=factor
+                )
+            ),
+        )
+    full, coarse = (call["gnss_los"] for call in captured_core)
+    cache = np.load(
+        tmp_path
+        / "out4/scratch/gnss"
+        / next(
+            p.name
+            for p in (tmp_path / "out4/scratch/gnss").glob("gnss_los_disp_*.npy")
+            if "std" not in p.name
+        )
+    )
+
+    assert cache.shape == (50, 50)  # computed on the fit grid
+    assert coarse.shape == full.shape == (200, 200)
+    spread = np.ptp(full)
+    assert spread > 0
+    # Between the outermost block centres (pixels 2..198) it is interpolated
+    inner = (slice(2, 199), slice(2, 199))
+    np.testing.assert_allclose(coarse[inner], full[inner], atol=0.005 * spread)
+    # In the 2-pixel edge band the edge value is held
+    np.testing.assert_allclose(coarse, full, atol=0.03 * spread)
