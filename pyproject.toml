@@ -40,8 +40,7 @@ dependencies = [
   "matplotlib",
   # the `disp` extra brings what opera_utils.disp imports (reference pixel)
   "opera-utils[disp]",
-  # TEMPORARY: switch back to Venti main before merging (see C2 in learning log)
-  "venti @ git+https://github.com/opera-adt/Venti@modular",
+  "venti @ git+https://github.com/opera-adt/Venti",
 ]
 
 [project.urls]
