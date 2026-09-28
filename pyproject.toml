@@ -13,7 +13,7 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
 ]
-license = { file = "LICENSE.txt" }
+license = { file = "LICENSE" }
 # The version will be written into a version.py upon install, auto-generated
 # see section: setuptools_scm
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
@@ -34,10 +34,12 @@ dependencies = [
   "h5netcdf",
   "netcdf4",  # imported directly (workflow._read_wavelength_m)
   "requests",
+  "urllib3",  # imported directly (download retry)
   "tqdm",
   "ruamel.yaml",
   "click",
   "matplotlib",
+  "cmap",  # browse image colormaps
   # the `disp` extra brings what opera_utils.disp imports (reference pixel)
   "opera-utils[disp]",
   "venti @ git+https://github.com/opera-adt/Venti",

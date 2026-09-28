@@ -2,6 +2,7 @@ name: my-cal-disp
 channels:
   - conda-forge
 dependencies:
+  - python>=3.11
   # C-extension packages best installed via conda
   - gdal
   - libgdal-netcdf
