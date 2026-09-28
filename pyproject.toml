@@ -69,6 +69,14 @@ write_to = "src/cal_disp/_version.py"
 # https://github.com/pypa/setuptools_scm#version-number-construction
 version_scheme = "no-guess-dev" # Will not guess the next version
 
+[tool.black]
+# Lowest supported Python (requires-python); without it Black targets every
+# version up to its newest and warns that the running Python cannot check it.
+target-version = ["py311"]
+# Same style as the pre-commit hook, so plain `black` gives identical results
+preview = true
+enable-unstable-feature = ["string_processing"]
+
 [tool.ruff]
 src = ["src"]
 unsafe-fixes = true
