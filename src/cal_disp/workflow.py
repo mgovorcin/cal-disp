@@ -628,8 +628,11 @@ def run_calibration(
     # TODO: discuss and improve. This is the uncertainty of the GNSS reference
     # (UNR sigmas projected to LOS and interpolated per pixel), NOT of the
     # fitted surface, which averages GNSS over each window and is smoothed.
+    # Venti's RBF interpolation of the station sigmas overshoots between
+    # stations (negative at ~10% of NYC F08622 pixels), so clip at 0; the fit
+    # weighting above uses Venti's values unchanged (1/sigma^2).
     calibration_std = xr.DataArray(
-        gnss_los_std[np.newaxis, :, :],
+        np.clip(gnss_los_std, 0, None)[np.newaxis, :, :],
         coords=coords,
         dims=["time", "y", "x"],
         attrs={

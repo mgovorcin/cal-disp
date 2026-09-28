@@ -227,3 +227,34 @@ def test_find_reference_point(tmp_path: Path):
 
     assert 5 <= row < 15
     assert 30 <= col < 45
+
+
+def test_run_calibration_clips_negative_std(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    monkeypatch,
+):
+    """RBF-interpolated GNSS sigmas can overshoot below 0: never written."""
+    import venti.gnss
+
+    def _overshooting_std(**_kwargs):
+        std = np.full((200, 200), 0.5, dtype=np.float32)  # mm
+        std[:50] = -0.3
+        return std
+
+    monkeypatch.setattr(venti.gnss, "compute_gnss_los_std", _overshooting_std)
+    lookup_file, tenv8_dir = sample_unr_data
+    out_path = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+    )
+
+    with xr.open_dataset(out_path) as ds:
+        std = ds["calibration_std"].values[0]
+    np.testing.assert_array_equal(std[:50], 0)
+    np.testing.assert_allclose(std[50:], 0.0005)
