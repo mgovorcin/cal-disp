@@ -1,62 +1,58 @@
 #!/bin/bash
 # build_golden_output.sh
 #
-# Generate a golden dataset from REAL downloaded OPERA data.
-# Use this for manual validation that the pipeline processes actual products correctly.
+# Build the DISP-CAL golden dataset (frame F08882, pair 2022-01-11 / 2022-07-22)
+# in the delivery layout, ready for run_validation.sh and the delivered commands.
 #
-# Prerequisites
-# -------------
-#   - cal-disp installed in the active environment
-#   - Earthdata credentials configured (for cal-disp download commands)
-#   - Static layer GeoTIFFs (LOS ENU + DEM) for the chosen frame
+# Requirements
+# ------------
+#   - cal-disp installed with the download extra (pip install "cal-disp[download]")
+#   - curl, and Earthdata login credentials in ~/.netrc
 #
 # Usage
 # -----
-#   # Minimal — reads output root from $CAL_DISP_TEST_DATA
-#   ./scripts/build_golden_output.sh \
-#       --static-dir /path/to/static_layers
+#   scripts/build_golden_output.sh [--output-dir DIR] [--skip-download]
 #
-#   # Fully explicit
-#   ./scripts/build_golden_output.sh \
-#       --output-dir /path/to/test_data \
-#       --frame-id   8882 \
-#       --start      2016-07-01 \
-#       --end        2016-08-31 \
-#       --static-dir /path/to/static_layers \
-#       --algo-params configs/algorithm_parameters.yaml \
-#       --unr-version 0.3 \
-#       --unr-type constant \
-#       --skip-tropo
+#   --output-dir DIR   Dataset folder to create (default: ./delivery_data_cal_disp).
+#   --skip-download    Use the inputs already in DIR/input_data.
 #
-# Output layout (under <output-dir>/)
-# ------------------------------------
-#   golden/
-#     disp/           downloaded OPERA_L3_DISP-S1_*.nc
-#     gnss/           grid_latlon_lookup_v<version>.txt + <id>_IGS20_<type>.tenv8
-#     los.tif         (symlinked from --static-dir)
-#     dem.tif         (symlinked from --static-dir)
-#     algorithm_parameters.yaml
-#   golden_output/
-#     OPERA_L4_DISP-CAL-S1_*.nc   expected CalProduct
+# Output layout (DIR/)
+# --------------------
+#   configs/        algorithm_parameters.yaml, runconfig.yaml (paths relative
+#                   to the parent of DIR, e.g. the folder mounted at /home/work)
+#   input_data/     disp/, static_input/, tropo/, gnss/
+#   golden_output/  golden product (.nc, .png)
+#   output/         empty; test products from run_validation.sh or cal-disp run
 #
-# After running, enable integration tests with:
-#   export CAL_DISP_TEST_DATA=<output-dir>
-#   pytest -m integration
+# The golden product is only reproducible to the validation tolerance in the
+# same software environment. For a delivery, run this script inside the
+# delivered Docker image, e.g. from the folder that holds cal-disp/:
+#   docker run --rm --user $(id -u):$(id -g) -v $PWD:/home/work -w /home/work \
+#       -v ~/.netrc:/home/conda/.netrc:ro <image> \
+#       bash cal-disp/scripts/build_golden_output.sh
+#
+# Verify
+# ------
+#   scripts/run_validation.sh --golden-dir DIR
+# or, as delivered (from the parent of DIR):
+#   cal-disp run DIR/configs/runconfig.yaml
+#   cal-disp validate DIR/golden_output/<golden>.nc DIR/output/<test>.nc
 
 set -euo pipefail
 
-# Defaults
-FRAME_ID="8882"
-START_DATE="2016-07-01"
-END_DATE="2016-08-31"
-UNR_VERSION="0.3"  # the constant grid exists only for 0.3
+# Golden case
+FRAME_ID=8882
+DISP_NAME="OPERA_L3_DISP-S1_IW_F08882_VV_20220111T002651Z_20220722T002657Z_v1.0_20251027T005420Z"
+STATIC_NAME="OPERA_L3_DISP-S1-STATIC_F08882_20140403_S1A_v1.0"
+REF_DATE="20220111"
+SEC_DATE="20220722"
+UNR_VERSION="0.3"
 UNR_TYPE="constant"
-SKIP_TROPO=false
-OUTPUT_DIR="${CAL_DISP_TEST_DATA:-}"
-STATIC_DIR=""
-ALGO_PARAMS="$(dirname "$0")/../configs/algorithm_parameters.yaml"
+ASF_URL="https://cumulus.asf.earthdatacloud.nasa.gov/OPERA"
 
-# Argument parsing
+OUTPUT_DIR="delivery_data_cal_disp"
+SKIP_DOWNLOAD=false
+
 usage() {
     grep "^#" "$0" | grep -v "^#!/" | sed 's/^# \?//'
     exit 0
@@ -64,151 +60,118 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --output-dir)   OUTPUT_DIR="$2";   shift 2 ;;
-        --frame-id)     FRAME_ID="$2";     shift 2 ;;
-        --start)        START_DATE="$2";   shift 2 ;;
-        --end)          END_DATE="$2";     shift 2 ;;
-        --static-dir)   STATIC_DIR="$2";   shift 2 ;;
-        --algo-params)  ALGO_PARAMS="$2";  shift 2 ;;
-        --unr-version)  UNR_VERSION="$2";  shift 2 ;;
-        --unr-type)     UNR_TYPE="$2";     shift 2 ;;
-        --skip-tropo)   SKIP_TROPO=true;   shift ;;
-        -h|--help)      usage ;;
+        --output-dir)    OUTPUT_DIR="$2"; shift 2 ;;
+        --skip-download) SKIP_DOWNLOAD=true; shift ;;
+        -h|--help)       usage ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
 
-# Validate inputs
-if [[ -z "${OUTPUT_DIR}" ]]; then
-    echo "ERROR: Provide --output-dir or set \$CAL_DISP_TEST_DATA." >&2
+# Work from the parent of the dataset folder, so runconfig paths are relative
+mkdir -p "${OUTPUT_DIR}"
+cd "$(dirname "$(realpath "${OUTPUT_DIR}")")"
+D="$(basename "${OUTPUT_DIR}")"
+
+if compgen -G "${D}/golden_output/OPERA_L4_DISP-CAL-S1_*.nc" > /dev/null; then
+    echo "ERROR: ${D}/golden_output already has a golden product; remove it first." >&2
     exit 1
 fi
+mkdir -p "${D}"/configs "${D}"/input_data/{disp,static_input,tropo,gnss} \
+    "${D}"/golden_output "${D}"/output
 
-if [[ -z "${STATIC_DIR}" ]]; then
-    echo "ERROR: --static-dir is required (path to directory with LOS and DEM GeoTIFFs)." >&2
-    exit 1
-fi
+DISP_FILE="${D}/input_data/disp/${DISP_NAME}.nc"
+LOS_FILE="${D}/input_data/static_input/${STATIC_NAME}_line_of_sight_enu.tif"
+DEM_FILE="${D}/input_data/static_input/${STATIC_NAME}_dem.tif"
+GNSS_DIR="${D}/input_data/gnss"
+TROPO_DIR="${D}/input_data/tropo"
 
-LOS_FILE=$(find "${STATIC_DIR}" -name "*line_of_sight_enu.tif" -type f | head -n 1)
-DEM_FILE=$(find "${STATIC_DIR}" -name "*dem.tif" -type f | head -n 1)
+echo "=== Building golden dataset in $(pwd)/${D}"
 
-if [[ -z "${LOS_FILE}" ]]; then
-    echo "ERROR: No *line_of_sight_enu.tif found in ${STATIC_DIR}." >&2
-    exit 1
-fi
-if [[ -z "${DEM_FILE}" ]]; then
-    echo "ERROR: No *dem.tif found in ${STATIC_DIR}." >&2
-    exit 1
-fi
-
-if [[ ! -f "${ALGO_PARAMS}" ]]; then
-    echo "ERROR: Algorithm parameters file not found: ${ALGO_PARAMS}" >&2
-    exit 1
-fi
-
-ALGO_PARAMS="$(realpath "${ALGO_PARAMS}")"
-
-# The staged UNR product must match the algorithm's grid_type
-ALGO_GRID_TYPE=$(sed -n 's/^[[:space:]]*grid_type:[[:space:]]*\([a-z]*\).*/\1/p' "${ALGO_PARAMS}")
-if [[ "${ALGO_GRID_TYPE}" != "${UNR_TYPE}" ]]; then
-    echo "ERROR: --unr-type ${UNR_TYPE} but grid_type in ${ALGO_PARAMS} is '${ALGO_GRID_TYPE}'." >&2
-    exit 1
-fi
-OUTPUT_DIR="$(realpath "${OUTPUT_DIR}")"
-
-GOLDEN_DIR="${OUTPUT_DIR}/golden"
-GOLDEN_OUTPUT_DIR="${OUTPUT_DIR}/golden_output"
-
-# Directory structure
-echo "=== Building real-data golden dataset ==="
-echo "  frame        : ${FRAME_ID}"
-echo "  date range   : ${START_DATE} → ${END_DATE}"
-echo "  golden inputs: ${GOLDEN_DIR}"
-echo "  golden output: ${GOLDEN_OUTPUT_DIR}"
-echo ""
-
-mkdir -p \
-    "${GOLDEN_DIR}/disp" \
-    "${GOLDEN_DIR}/gnss" \
-    "${GOLDEN_OUTPUT_DIR}"
-
-WORK_DIR="${OUTPUT_DIR}/_work"
-mkdir -p "${WORK_DIR}"
-
-# Step 1: Download DISP-S1 data
-echo "[1/5] Downloading DISP-S1 data..."
-cal-disp download disp-s1 \
-    --frame-id "${FRAME_ID}" \
-    --start    "${START_DATE}" \
-    --end      "${END_DATE}" \
-    -o         "${GOLDEN_DIR}/disp"
-
-DISP_FILE=$(find "${GOLDEN_DIR}/disp" -name "OPERA_L3_DISP-S1_*.nc" -type f | head -n 1)
-if [[ -z "${DISP_FILE}" ]]; then
-    echo "ERROR: No DISP file downloaded." >&2; exit 1
-fi
-echo "  using: $(basename "${DISP_FILE}")"
-
-# Step 2: Download UNR GNSS data
-echo "[2/5] Downloading UNR GNSS data..."
-cal-disp download unr \
-    --frame-id  "${FRAME_ID}" \
-    --grid-type "${UNR_TYPE}" \
-    -o          "${GOLDEN_DIR}/gnss"
-
-UNR_LOOKUP=$(find "${GOLDEN_DIR}/gnss" -name "grid_latlon_lookup*.txt" -type f | head -n 1)
-if [[ -z "${UNR_LOOKUP}" ]]; then
-    echo "ERROR: UNR lookup table not found after download." >&2; exit 1
-fi
-
-# Step 3: Download tropospheric data (optional)
-if [[ "${SKIP_TROPO}" == false ]]; then
-    echo "[3/5] Downloading tropospheric data..."
-    cal-disp download tropo \
-        --input-file "${DISP_FILE}" \
-        -o           "${GOLDEN_DIR}/tropo"
+# 1. Inputs
+if [[ "${SKIP_DOWNLOAD}" == false ]]; then
+    fetch() {  # Earthdata download (credentials from ~/.netrc)
+        [[ -s "$2" ]] && return 0
+        curl --fail --silent --show-error --netrc --location \
+            --cookie ~/.edl_cookies --cookie-jar ~/.edl_cookies -o "$2" "$1"
+    }
+    echo "[1/4] Downloading inputs..."
+    fetch "${ASF_URL}/OPERA_L3_DISP-S1_V1/${DISP_NAME}/${DISP_NAME}.nc" "${DISP_FILE}"
+    fetch "${ASF_URL}/OPERA_L3_DISP-S1-STATIC_V1/${STATIC_NAME}/$(basename "${LOS_FILE}")" "${LOS_FILE}"
+    fetch "${ASF_URL}/OPERA_L3_DISP-S1-STATIC_V1/${STATIC_NAME}/$(basename "${DEM_FILE}")" "${DEM_FILE}"
+    if ! compgen -G "${TROPO_DIR}/OPERA_L4_TROPO-ZENITH_*.nc" > /dev/null; then
+        cal-disp download tropo -i "${DISP_FILE}" -o "${TROPO_DIR}"
+    fi
+    cal-disp download unr --frame-id "${FRAME_ID}" --grid-type "${UNR_TYPE}" -o "${GNSS_DIR}"
 else
-    echo "[3/5] Skipping tropospheric download (--skip-tropo)."
+    echo "[1/4] Using existing inputs (--skip-download)."
 fi
 
-# Step 4: Link static layers into golden dir
-echo "[4/5] Linking static layers..."
-ln -sf "$(realpath "${LOS_FILE}")" "${GOLDEN_DIR}/los.tif"
-ln -sf "$(realpath "${DEM_FILE}")" "${GOLDEN_DIR}/dem.tif"
-cp "${ALGO_PARAMS}" "${GOLDEN_DIR}/algorithm_parameters.yaml"
-echo "  los.tif  → $(realpath "${LOS_FILE}")"
-echo "  dem.tif  → $(realpath "${DEM_FILE}")"
+REF_TROPO=$(find "${TROPO_DIR}" -name "OPERA_L4_TROPO-ZENITH_${REF_DATE}T*.nc" | sort | head -n 1)
+SEC_TROPO=$(find "${TROPO_DIR}" -name "OPERA_L4_TROPO-ZENITH_${SEC_DATE}T*.nc" | sort | head -n 1)
+LOOKUP="${GNSS_DIR}/grid_latlon_lookup_v${UNR_VERSION}.txt"
+for f in "${DISP_FILE}" "${LOS_FILE}" "${DEM_FILE}" "${LOOKUP}" "${REF_TROPO}" "${SEC_TROPO}"; do
+    if [[ -z "${f}" || ! -s "${f}" ]]; then
+        echo "ERROR: missing input: ${f:-TROPO file for ${REF_DATE}/${SEC_DATE}}" >&2
+        exit 1
+    fi
+done
 
-# Step 5: Generate config and run calibration
-echo "[5/5] Running calibration workflow..."
-CONFIG_FILE="${WORK_DIR}/runconfig.yaml"
+# 2. Configs
+echo "[2/4] Writing configs..."
+cat > "${D}/configs/algorithm_parameters.yaml" <<'EOF'
+calibration_options:
+  grid_type: constant
+  reference_frame: IGS20
+  unwrap_error_correction: true
+  apply_tropo_correction: true
+  apply_solid_earth_tide_correction: true
+  window_size_meters: 600000.0
+  posting_meters: 30.0
+  downsample_factor: 6
+  downsample_method: mean
+  downsample_weighted: false
+  event_mask_buffer_pixels: 0
+  residual_outlier_mad_threshold:
+  residual_region_mad_threshold:
+  residual_region_min_pixels: 20
+  mask_fit_residual_outliers: true
+  weight_fit_by_gnss_uncertainty: false
+  calibration_surface_smoothing_method: gaussian
+  calibration_surface_smoothing_sigma: 0.0
+  savitzky_golay:
+    window_length: 51
+    polyorder: 3
+EOF
 
 cal-disp config \
     -d  "${DISP_FILE}" \
-    -ul "${UNR_LOOKUP}" \
-    -ud "${GOLDEN_DIR}/gnss" \
+    -f  "${FRAME_ID}" \
+    -ul "${LOOKUP}" \
+    -ud "${GNSS_DIR}" \
     -uv "${UNR_VERSION}" \
     -ut "${UNR_TYPE}" \
-    --los-file  "${GOLDEN_DIR}/los.tif" \
-    --dem-file  "${GOLDEN_DIR}/dem.tif" \
-    -a  "${GOLDEN_DIR}/algorithm_parameters.yaml" \
-    -c  "${CONFIG_FILE}" \
-    --frame-id  "${FRAME_ID}" \
-    -o  "${GOLDEN_OUTPUT_DIR}" \
-    --work-dir  "${WORK_DIR}"
+    --los-file "${LOS_FILE}" \
+    --dem-file "${DEM_FILE}" \
+    --ref-tropo-files "${REF_TROPO}" \
+    --sec-tropo-files "${SEC_TROPO}" \
+    -a  "${D}/configs/algorithm_parameters.yaml" \
+    -o  "${D}/output" \
+    --work-dir "${D}/output/_work" \
+    --keep-relative \
+    -c  runconfig.yaml > /dev/null
+mv "${D}/output/_work/runconfig.yaml" "${D}/configs/runconfig.yaml"
+rm -rf "${D}/output/_work"
 
-cal-disp run "${CONFIG_FILE}"
+# 3. Golden run
+echo "[3/4] Running calibration..."
+cal-disp run "${D}/configs/runconfig.yaml"
+mv "${D}"/output/OPERA_L4_DISP-CAL-S1_* "${D}/golden_output/"
+rm -rf "${D}/output/_work" "${D}/output/cal_disp.log"
 
-# Summary
+echo "[4/4] Done."
+echo "  Golden product: $(ls "${D}"/golden_output/*.nc)"
 echo ""
-echo "Done."
-echo ""
-echo "Golden inputs : ${GOLDEN_DIR}"
-echo "Golden output : ${GOLDEN_OUTPUT_DIR}"
-ls -lh "${GOLDEN_OUTPUT_DIR}"/*.nc 2>/dev/null || true
-echo ""
-echo "To validate a new run against this reference:"
-echo "  cal-disp validate <new_output.nc> ${GOLDEN_OUTPUT_DIR}/<reference.nc>"
-echo ""
-echo "To run the automated workflow integration tests (no golden data needed):"
-echo "  pytest -m integration"
+echo "Verify with:  scripts/run_validation.sh --golden-dir $(pwd)/${D}"
+echo "or, from $(pwd):"
+echo "  cal-disp run ${D}/configs/runconfig.yaml"
+echo "  cal-disp validate ${D}/golden_output/<golden>.nc ${D}/output/<test>.nc"
