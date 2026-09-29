@@ -52,6 +52,8 @@ Homepage = "https://github.com/opera-adt/cal-disp"
 # Entry points for the command line interface
 [project.scripts]
 cal-disp = "cal_disp.cli:cli_app"
+# Same CLI under the name used in the delivery instructions
+opera_cal-disp = "cal_disp.cli:cli_app"
 
 [tool.setuptools.dynamic]
 # Optional dependencies loaded from files

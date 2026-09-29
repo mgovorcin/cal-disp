@@ -161,6 +161,29 @@ cal-disp validate reference.nc output.nc --tolerance 1e-5
 cal-disp validate reference.nc output.nc --group main
 ```
 
+### Golden dataset
+
+Build the golden dataset (frame F08882) and validate it. Requires the
+`download` extra and Earthdata credentials in `~/.netrc`:
+
+```bash
+scripts/build_golden_output.sh --output-dir golden_data_disp_cal
+scripts/run_validation.sh --golden-dir golden_data_disp_cal
+```
+
+Or, with the Docker image, from the folder that holds `golden_data_disp_cal/`:
+
+```bash
+docker run --rm --user $(id -u):$(id -g) -v $PWD:/home/work -w /home/work <image> \
+    cal-disp run golden_data_disp_cal/configs/runconfig.yaml
+docker run --rm -v $PWD:/home/work -w /home/work <image> \
+    opera_cal-disp validate golden_data_disp_cal/golden_output/<golden>.nc \
+    golden_data_disp_cal/output/<test>.nc
+```
+
+A golden product validates only in the software environment that made it: for a
+delivery, build it inside the delivered image (see the script header).
+
 ---
 
 ## Algorithm Parameters
