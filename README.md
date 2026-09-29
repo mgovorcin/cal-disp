@@ -167,18 +167,18 @@ Build the golden dataset (frame F08882) and validate it. Requires the
 `download` extra and Earthdata credentials in `~/.netrc`:
 
 ```bash
-scripts/build_golden_output.sh --output-dir delivery_data_cal_disp
-scripts/run_validation.sh --golden-dir delivery_data_cal_disp
+scripts/build_golden_output.sh --output-dir delivery_data_disp_cal
+scripts/run_validation.sh --golden-dir delivery_data_disp_cal
 ```
 
-Or, with the Docker image, from the folder that holds `delivery_data_cal_disp/`:
+Or, with the Docker image, from the folder that holds `delivery_data_disp_cal/`:
 
 ```bash
 docker run --rm --user $(id -u):$(id -g) -v $PWD:/home/work -w /home/work <image> \
-    cal-disp run delivery_data_cal_disp/configs/runconfig.yaml
+    cal-disp run delivery_data_disp_cal/configs/runconfig.yaml
 docker run --rm -v $PWD:/home/work -w /home/work <image> \
-    opera_cal-disp validate delivery_data_cal_disp/golden_output/<golden>.nc \
-    delivery_data_cal_disp/output/<test>.nc
+    opera_cal-disp validate delivery_data_disp_cal/golden_output/<golden>.nc \
+    delivery_data_disp_cal/output/<test>.nc
 ```
 
 A golden product validates only in the software environment that made it: for a

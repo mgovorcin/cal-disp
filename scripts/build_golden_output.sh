@@ -13,7 +13,7 @@
 # -----
 #   scripts/build_golden_output.sh [--output-dir DIR] [--skip-download]
 #
-#   --output-dir DIR   Dataset folder to create (default: ./delivery_data_cal_disp).
+#   --output-dir DIR   Dataset folder to create (default: ./delivery_data_disp_cal).
 #   --skip-download    Use the inputs already in DIR/input_data.
 #
 # Output layout (DIR/)
@@ -50,7 +50,7 @@ UNR_VERSION="0.3"
 UNR_TYPE="constant"
 ASF_URL="https://cumulus.asf.earthdatacloud.nasa.gov/OPERA"
 
-OUTPUT_DIR="delivery_data_cal_disp"
+OUTPUT_DIR="delivery_data_disp_cal"
 SKIP_DOWNLOAD=false
 
 usage() {
