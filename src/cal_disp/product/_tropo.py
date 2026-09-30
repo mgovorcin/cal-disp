@@ -460,9 +460,11 @@ def interpolate_to_dem_surface(
     # Interpolate
     vals = rgi(pts)
 
-    # Create output DataArray
-    out = dem.copy()
-    out.values[:] = vals.reshape(dem.shape).astype(np.float32)
+    # New float32 array on the DEM grid (coordinates and CRS kept).  Never
+    # write into the DEM's own buffer: the DISP-S1-STATIC DEM is float16 on
+    # disk, and a delay of ~2.4 m stored in float16 is quantised to ~2 mm.
+    out = dem.astype(np.float32, copy=True)
+    out.values[...] = vals.reshape(dem.shape).astype(np.float32)
     out.name = da_tropo_cube.name or "tropospheric_delay"
 
     # Update attributes
