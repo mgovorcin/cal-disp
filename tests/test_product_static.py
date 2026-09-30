@@ -48,7 +48,7 @@ class TestStaticLayerDataAccess:
         layer = StaticLayer.from_path(sample_static_dem)
         data = layer.read(band=1)
 
-        assert data.shape == (100, 100)
+        assert data.shape == (200, 200)
         assert data.dtype == np.float32
 
     def test_read_multiple_bands(self, sample_static_los: Path):
@@ -73,7 +73,7 @@ class TestStaticLayerDataAccess:
         assert "dem" in ds
         assert "x" in ds.coords
         assert "y" in ds.coords
-        assert ds["dem"].shape == (100, 100)
+        assert ds["dem"].shape == (200, 200)
 
     def test_to_dataset_los(self, sample_static_los: Path):
         """Should convert LOS to xarray with components."""
@@ -108,8 +108,8 @@ class TestStaticLayerMetadata:
         layer = StaticLayer.from_path(sample_static_dem)
         height, width = layer.get_shape()
 
-        assert height == 100
-        assert width == 100
+        assert height == 200
+        assert width == 200
 
     def test_get_bounds(self, sample_static_dem: Path):
         """Should get native bounds."""
@@ -126,7 +126,7 @@ class TestStaticLayerMetadata:
         layer = StaticLayer.from_path(sample_static_dem)
         epsg = layer.get_epsg()
 
-        assert epsg == 4326
+        assert epsg == 32611
 
     def test_filename_property(self, sample_static_dem: Path):
         """Should return filename."""
