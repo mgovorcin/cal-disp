@@ -103,6 +103,23 @@ def _unwrap_cycle_length_m(wavelength_m: float) -> float:
     return wavelength_m / 2.0
 
 
+def _load_displacement(ds_disp: xr.Dataset, block_rows: int = 512) -> np.ndarray:
+    """Load the ``displacement`` layer once, as float32.
+
+    The layer is float64 on disk (585 MB for a DISP-S1 frame).  Reading it
+    with ``.values`` loads the whole float64 array and keeps it cached in the
+    dataset for the rest of the run, next to the float32 copy the fit uses.
+    Row blocks are read into a preallocated float32 array instead, so the
+    full float64 array is never held and nothing stays cached.  The values
+    equal ``displacement.values.astype(np.float32)`` exactly.
+    """
+    displacement = ds_disp["displacement"]
+    out = np.empty(displacement.shape, dtype=np.float32)
+    for row in range(0, displacement.shape[0], block_rows):
+        out[row : row + block_rows] = displacement[row : row + block_rows].values
+    return out
+
+
 def _date_to_decimal_year(dt: datetime) -> float:
     """Convert a datetime to a decimal year (e.g. 2022.55)."""
     year = dt.year
@@ -529,7 +546,9 @@ def run_calibration(
         _date_to_decimal_year(disp_product.secondary_date),
     )
 
-    disp_2d = ds_disp.displacement.values.astype(np.float32)
+    # Displacement (m): float64 on disk, read in row blocks straight into
+    # float32 so the float64 array is never held or cached in `ds_disp`
+    disp_2d = _load_displacement(ds_disp)
 
     # Valid pixels (both masks: 1 = valid)
     mask = ~np.isnan(disp_2d)
