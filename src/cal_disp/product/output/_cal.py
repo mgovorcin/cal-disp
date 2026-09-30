@@ -17,6 +17,7 @@ from ._identification import build_identification_dataset
 from ._main import build_main_dataset
 from ._metadata import build_metadata_dataset
 from ._utils import (
+    build_encoding,
     build_filename,
     compute_transform_from_coords,
     get_crs,
@@ -91,6 +92,9 @@ class CalProduct:
         Date when product was generated.
     mode : str
         Acquisition mode (e.g., "IW" for S1, "LSAR" for NI).
+    compression : bool
+        Write raster layers gzip-compressed (with the shuffle filter). Rasters
+        are chunked (256, 256) either way.
 
     Examples
     --------
@@ -120,6 +124,7 @@ class CalProduct:
     version: str
     production_date: datetime
     mode: str = "IW"
+    compression: bool = True
 
     # Filename pattern supporting both S1 and NI sensors
     _PATTERN = re.compile(
@@ -235,6 +240,7 @@ class CalProduct:
         spatial_ref: xr.DataArray | None = None,
         global_metadata: dict[str, str] | None = None,
         version: str = "1.0",
+        compression: bool = True,
     ) -> CalProduct:
         """Create calibration product with main group only.
 
@@ -256,6 +262,9 @@ class CalProduct:
             Additional metadata. Default is None.
         version : str, optional
             Product version. Default is "1.0".
+        compression : bool, optional
+            Write the raster layers gzip-compressed (level 4, shuffle) in
+            (256, 256) chunks, as the DISP-S1 input. Default is True.
 
         Returns
         -------
@@ -309,7 +318,11 @@ class CalProduct:
             sensor=sensor,
             metadata=global_metadata,
         )
-        ds_main.to_netcdf(output_file, engine="h5netcdf")
+        ds_main.to_netcdf(
+            output_file,
+            engine="h5netcdf",
+            encoding=build_encoding(ds_main, compression=compression),
+        )
 
         return cls(
             path=output_file,
@@ -321,6 +334,7 @@ class CalProduct:
             version=version,
             production_date=production_date,
             mode=disp_product.mode,
+            compression=compression,
         )
 
     def add_identification(
@@ -499,7 +513,13 @@ class CalProduct:
             ceos_analysis_ready_data_document_identifier=ceos_analysis_ready_data_document_identifier,
             ceos_analysis_ready_data_product_type=ceos_analysis_ready_data_product_type,
         )
-        ds_id.to_netcdf(self.path, mode="a", group="identification", engine="h5netcdf")
+        ds_id.to_netcdf(
+            self.path,
+            mode="a",
+            group="identification",
+            engine="h5netcdf",
+            encoding=build_encoding(ds_id, compression=self.compression),
+        )
 
     def add_metadata(
         self,
@@ -590,7 +610,13 @@ class CalProduct:
             product_specification_document_id=product_specification_document_id,
             pge_runconfig=pge_runconfig,
         )
-        ds_meta.to_netcdf(self.path, mode="a", group="metadata", engine="h5netcdf")
+        ds_meta.to_netcdf(
+            self.path,
+            mode="a",
+            group="metadata",
+            engine="h5netcdf",
+            encoding=build_encoding(ds_meta, compression=self.compression),
+        )
 
     def add_auxiliary(
         self,
@@ -639,7 +665,13 @@ class CalProduct:
             model_3d_std=model_3d_std,
             spatial_ref=spatial_ref,
         )
-        ds_aux.to_netcdf(self.path, mode="a", group="auxiliary", engine="h5netcdf")
+        ds_aux.to_netcdf(
+            self.path,
+            mode="a",
+            group="auxiliary",
+            engine="h5netcdf",
+            encoding=build_encoding(ds_aux, compression=self.compression),
+        )
 
     def open_dataset(self, group: str | None = None) -> xr.Dataset:
         """Open calibration dataset.

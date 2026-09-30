@@ -76,6 +76,14 @@ class CalibrationWorkflow(YamlModel):
         ),
     )
 
+    compression: bool = Field(
+        default=True,
+        description=(
+            "Write the product's raster layers gzip-compressed (level 4, shuffle"
+            " filter) in (256, 256) chunks, as the DISP-S1 input."
+        ),
+    )
+
     # Optional ancillary file groups
     dynamic_ancillary_options: Optional[DynamicAncillaryFileGroup] = Field(
         default=None,
@@ -265,6 +273,7 @@ class CalibrationWorkflow(YamlModel):
             f"  Log file:         {self.log_file}",
             f"  Keep relative:    {self.keep_paths_relative}",
             f"  Product version:  {self.product_version}",
+            f"  Compression:      {self.compression}",
             "",
         ]
 

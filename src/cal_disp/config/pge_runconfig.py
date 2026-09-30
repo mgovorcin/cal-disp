@@ -60,7 +60,10 @@ class OutputOptions(YamlModel):
 
     compression: bool = Field(
         default=True,
-        description="Whether to compress output files.",
+        description=(
+            "Whether to compress output files (gzip level 4 + shuffle, (256, 256)"
+            " chunks, as the DISP-S1 input)."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -214,6 +217,7 @@ class RunConfig(YamlModel):
             worker_settings=self.worker_settings,
             log_file=log_file,
             product_version=self.output_options.product_version,
+            compression=self.output_options.compression,
             # Resolve paths to absolute
             keep_paths_relative=False,
         )

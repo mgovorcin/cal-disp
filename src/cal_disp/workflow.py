@@ -341,6 +341,7 @@ def run_calibration(
     calibration_reference_reference_frame: str = "IGS20",
     # Product metadata
     product_version: str = "1.0",
+    compression: bool = True,
     platform_id: str = "S1A",
     absolute_orbit_number: int = 0,  # TODO: extract from DISP identification group
     track_number: int = 0,  # TODO: extract from DISP identification group
@@ -402,6 +403,8 @@ def run_calibration(
     product_version : str
         Product version in ``<major>.<minor>`` format; written to the product
         filename and identification metadata.
+    compression : bool
+        Write the product rasters gzip-compressed in (256, 256) chunks.
     platform_id : str
         Satellite platform identifier (e.g. ``'S1A'``).
     absolute_orbit_number : int
@@ -723,6 +726,7 @@ def run_calibration(
             "calibration_resolution": f"{int(x_spacing)}m",
         },
         version=product_version,
+        compression=compression,
     )
 
     cal_product.add_identification(

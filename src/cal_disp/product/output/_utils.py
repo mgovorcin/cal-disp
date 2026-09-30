@@ -101,3 +101,42 @@ def compute_stats(data: np.ndarray) -> dict[str, float] | None:
         "min": float(np.min(valid_data)),
         "max": float(np.max(valid_data)),
     }
+
+
+RASTER_CHUNK = 256
+
+
+def build_encoding(
+    ds: xr.Dataset, compression: bool = True, chunk: int = RASTER_CHUNK
+) -> dict[str, dict]:
+    """NetCDF encoding for every variable of `ds`.
+
+    Raster variables (2-D ``(y, x)`` or 3-D ``(time, y, x)``) are chunked
+    ``(chunk, chunk)`` / ``(1, chunk, chunk)`` and, with `compression`,
+    written with gzip level 4 plus the shuffle filter, as the DISP-S1 input.
+    Floating-point rasters keep ``float32`` and ``_FillValue = NaN``.
+    Coordinate variables get no ``_FillValue`` (CF forbids it on them) and
+    no compression; scalar and string variables are left as they are.
+    """
+    encoding: dict[str, dict] = {}
+    for name_, var in ds.data_vars.items():
+        name = str(name_)
+        if var.ndim < 2:
+            continue
+        enc: dict = {
+            "chunksizes": tuple(
+                min(chunk, size) if dim in ("y", "x") else 1
+                for dim, size in zip(var.dims, var.shape)
+            )
+        }
+        if compression:
+            enc.update(zlib=True, complevel=4, shuffle=True)
+        else:
+            enc.update(zlib=False, shuffle=False)
+        if np.issubdtype(var.dtype, np.floating):
+            enc.update(dtype="float32", _FillValue=np.float32(np.nan))
+        encoding[name] = enc
+    for coord in ds.coords:
+        if ds[coord].ndim == 1:
+            encoding[str(coord)] = {"_FillValue": None}
+    return encoding
