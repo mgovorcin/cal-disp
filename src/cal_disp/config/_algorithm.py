@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from collections.abc import Mapping
+from typing import Any, Literal, Optional
 
 from pydantic import Field, computed_field
 
-from ._yaml import YamlModel
+from ._yaml import YamlModel, _computed_fields_exclude
 
 
 class SavitzkyGolayOptions(YamlModel):
@@ -338,3 +339,47 @@ class AlgorithmParameters(YamlModel):
     def create_default(cls) -> "AlgorithmParameters":
         """Create algorithm parameters with default values."""
         return cls()
+
+    def with_overrides(self, overrides: Mapping[str, Any]) -> "AlgorithmParameters":
+        """Return a validated copy with `overrides` applied.
+
+        Parameters
+        ----------
+        overrides : Mapping[str, Any]
+            Frame-specific values, e.g. one entry of the
+            ``algorithm_parameters_overrides_json`` file. Keys are either
+            option groups (``{"calibration_options": {"downsample_factor": 3}}``)
+            or, as a shorthand, options of ``calibration_options``
+            (``{"downsample_factor": 3}``). Nested options are merged.
+
+        Returns
+        -------
+        AlgorithmParameters
+            New instance; ``self`` is returned unchanged for empty overrides.
+
+        Raises
+        ------
+        pydantic.ValidationError
+            For an unknown option or an invalid value.
+
+        """
+        if not overrides:
+            return self
+
+        def _merge(base: dict[str, Any], new: Mapping[str, Any]) -> dict[str, Any]:
+            for key, value in new.items():
+                if isinstance(value, Mapping) and isinstance(base.get(key), dict):
+                    _merge(base[key], value)
+                else:
+                    base[key] = value
+            return base
+
+        # Without computed fields: they would be rejected as extra inputs
+        data = self.model_dump(exclude=_computed_fields_exclude(self))
+        groups = set(type(self).model_fields)
+        for key, value in overrides.items():
+            if key in groups:
+                _merge(data, {key: value})
+            else:
+                _merge(data["calibration_options"], {key: value})
+        return type(self).model_validate(data)

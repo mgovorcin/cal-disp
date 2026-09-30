@@ -7,6 +7,7 @@ from cal_disp._log import get_max_memory_usage, log_runtime
 from cal_disp._version import __version__
 from cal_disp.browse_image import make_browse_image_from_nc
 from cal_disp.config._algorithm import AlgorithmParameters
+from cal_disp.config._utils import _parse_algorithm_overrides
 from cal_disp.config.workflow import CalibrationWorkflow
 from cal_disp.workflow import run_calibration
 
@@ -63,13 +64,40 @@ def run(
         logger.error(f"Missing input files: {', '.join(missing)}")
         raise SystemExit(1)
 
-    # Load algorithm parameters
+    # Load algorithm parameters, then apply the frame-specific overrides
     algo_params = AlgorithmParameters.from_yaml(
         runconfig.dynamic_ancillary_options.algorithm_parameters_file
     )
+    sta = runconfig.static_ancillary_options
+    if sta and sta.algorithm_parameters_overrides_json:
+        frame_id = runconfig.input_options.frame_id
+        overrides = _parse_algorithm_overrides(
+            sta.algorithm_parameters_overrides_json, frame_id
+        )
+        if overrides:
+            logger.info(
+                "Algorithm parameter overrides for frame %s from %s: %s",
+                frame_id,
+                sta.algorithm_parameters_overrides_json,
+                overrides,
+            )
+            algo_params = algo_params.with_overrides(overrides)
+        else:
+            logger.info(
+                "No algorithm parameter overrides for frame %s in %s",
+                frame_id,
+                sta.algorithm_parameters_overrides_json,
+            )
 
     # Extract optional tropo file lists from dynamic ancillaries
     dyn = runconfig.dynamic_ancillary_options
+    if dyn.mask_file is not None:
+        logger.warning(
+            "mask_file (%s) is not applied in this release: only the masks of the"
+            " DISP product (recommended_mask, water_mask) and the event databases"
+            " are used",
+            dyn.mask_file,
+        )
     ref_tropo = (
         [Path(f) for f in dyn.reference_tropo_files]
         if dyn.reference_tropo_files
@@ -82,7 +110,6 @@ def run(
     )
 
     # Extract optional static ancillary GeoJSON databases for event masking
-    sta = runconfig.static_ancillary_options
     defo_area_db = (
         Path(sta.deformation_area_database_json)
         if (sta and sta.deformation_area_database_json)

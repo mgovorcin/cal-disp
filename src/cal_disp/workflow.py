@@ -133,7 +133,7 @@ def _date_to_decimal_year(dt: datetime) -> float:
 def _load_los_bands(
     los_file: Path,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Read the (east, north, up) bands of a LOS GeoTIFF."""
+    """Read the (east, north, up) bands of a LOS GeoTIFF; NaN where no data."""
     with rasterio.open(los_file) as src:
         if src.count < 3:
             raise ValueError(
@@ -143,7 +143,10 @@ def _load_los_bands(
         los_east = src.read(1).astype(np.float32)
         los_north = src.read(2).astype(np.float32)
         los_up = src.read(3).astype(np.float32)
-    return los_east, los_north, los_up
+        nodata = src.nodata
+    from cal_disp.prep.consistency import mask_los_nodata
+
+    return mask_los_nodata(los_east, los_north, los_up, nodata)
 
 
 def _staged_station_files(
@@ -466,6 +469,10 @@ def run_calibration(
     # Load DISP product
     logger.info("Loading DISP product: %s", disp_file.name)
     disp_product = DispProduct.from_path(disp_file)
+    # The static layers are used by array index: same grid and frame required
+    from cal_disp.prep.consistency import check_input_geometry
+
+    check_input_geometry(disp_product, los_file, dem_file)
     ds_disp = disp_product.open_dataset()
 
     time = ds_disp.time.values
