@@ -11,14 +11,14 @@ Creates the science application software (SAS) using the [Venti](https://github.
 
 ### Prerequisites
 
-- Python ≥3.11
+- Python 3.11–3.13 (`environment.yml` bounds it: the conda-forge `netcdf4`
+  build for 3.14 warns about the numpy ABI)
 - mamba/conda
 
 ### Setup
 
-1. **Clone repositories:**
+1. **Clone the repository:**
 ```bash
-git clone https://github.com/opera-adt/venti.git
 git clone https://github.com/opera-adt/cal-disp.git
 ```
 
@@ -28,17 +28,22 @@ mamba env create --name my-cal-env --file cal-disp/environment.yml
 conda activate my-cal-env
 ```
 
-3. **Install packages:**
+3. **Install the package:**
 ```bash
-# Install venti
-python -m pip install -e venti/
-
 # Install cal-disp with download capabilities
 python -m pip install -e "cal-disp[download]"
 
 # Or basic install only
 python -m pip install -e cal-disp/
 ```
+
+This installs [Venti](https://github.com/opera-adt/Venti) at the commit
+pinned in `pyproject.toml` (the one the golden dataset and the regression
+tests were produced with). To develop against a Venti checkout instead,
+`pip install -e venti/` afterwards. Keep the compiled packages (`netcdf4`,
+`h5py`, `gdal`, `rasterio`, ...) from conda-forge as `environment.yml` lists
+them: the PyPI `netCDF4` wheel bundles a different HDF5 than `h5py`/GDAL link
+against, which can crash multi-threaded reads.
 
 ### Setup with pixi
 
@@ -61,7 +66,10 @@ Other tasks: `pixi run build-golden` and `pixi run validate --golden-dir DIR`
 wrap the scripts in `scripts/`. Re-run `pixi install` after pulling changes
 to `pyproject.toml` or `pixi.lock`.
 
-**Docker:** See [Docker_README](docker/README.md)
+**Docker:** See [docker/README.md](docker/README.md). The image installs the
+conda layer from `docker/conda-lock.txt`; regenerate that lock with
+`docker/create-lockfile.sh --file environment.yml [--no-docker] > docker/conda-lock.txt`
+whenever `environment.yml` changes.
 
 ---
 
