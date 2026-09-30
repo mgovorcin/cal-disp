@@ -91,6 +91,18 @@ def _read_wavelength_m(disp_file: Path) -> float:
     return float(wl_m)
 
 
+def _unwrap_cycle_length_m(wavelength_m: float) -> float:
+    """LOS displacement of one unwrapping cycle (2π of phase), in metres.
+
+    Repeat-pass InSAR measures the two-way path, so one phase cycle is
+    ``wavelength / 2`` of LOS displacement (27.7 mm for Sentinel-1 C-band,
+    not the 55.5 mm wavelength).  Venti's ``UnwrapCorrector`` rounds region
+    offsets to integer multiples of the value it is given as ``wavelength``,
+    so it must receive this cycle length, not the wavelength itself.
+    """
+    return wavelength_m / 2.0
+
+
 def _date_to_decimal_year(dt: datetime) -> float:
     """Convert a datetime to a decimal year (e.g. 2022.55)."""
     year = dt.year
@@ -595,11 +607,16 @@ def run_calibration(
         weights = ds_disp.temporal_coherence.values.astype(np.float32)
 
     ref_point = _find_reference_point(ds_disp, mask, work_directory)
+    # Cycle length of an unwrapping error: λ/2 (two-way path), derived from
+    # the product's radar wavelength so other sensors (e.g. NISAR) are
+    # handled too.  Venti calls this argument `wavelength_m` but uses it as
+    # the value region offsets are rounded to.
     wavelength_m = (
         _read_wavelength_m(disp_file)
         if cal.unwrap_error_correction
         else SENTINEL1_WAVELENGTH_M
     )
+    unwrap_cycle_m = _unwrap_cycle_length_m(wavelength_m)
 
     logger.info(
         "Fitting calibration surface (window=%d px, downsample=%d, corrections:"
@@ -620,7 +637,7 @@ def run_calibration(
             gnss_los_std=gnss_los_std if cal.weight_fit_by_gnss_uncertainty else None,
             event_mask=event_mask,
             options=cal.to_venti(),
-            wavelength_m=wavelength_m,
+            wavelength_m=unwrap_cycle_m,
             downsample_factor=cal.downsample_factor,
             downsample_method=cal.downsample_method,
             downsample_weights=weights,

@@ -189,6 +189,46 @@ def test_run_calibration_venti_core_inputs(
     assert applied == ("solid_earth_tide" if apply_set else "none")
 
 
+def test_unwrap_error_correction_is_off_by_default():
+    """Venti's mask-island unwrap correction is unvalidated: default off."""
+    assert CalibrationOptions().unwrap_error_correction is False
+    assert AlgorithmParameters().calibration_options.unwrap_error_correction is False
+    assert CalibrationOptions().to_venti().unwrap_error_correction is False
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_run_calibration_unwrap_cycle_is_half_wavelength(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    enabled: bool,
+):
+    """Venti rounds region offsets to multiples of its `wavelength_m`; one
+    unwrapping cycle is λ/2 of LOS displacement (two-way path), not λ."""
+    lookup_file, tenv8_dir = sample_unr_data
+    run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=AlgorithmParameters(
+            calibration_options=CalibrationOptions(
+                unwrap_error_correction=enabled,
+                apply_solid_earth_tide_correction=False,
+            )
+        ),
+    )
+
+    (call,) = captured_core
+    assert call["options"].unwrap_error_correction is enabled
+    # The fixture product's /identification/radar_wavelength is 0.05546 m
+    assert call["wavelength_m"] == pytest.approx(0.05546 / 2, rel=1e-6)
+    assert call["wavelength_m"] < 0.03  # never the full 55 mm wavelength
+
+
 def test_run_calibration_without_set_layer_warns(
     tmp_path: Path,
     sample_disp_product: Path,

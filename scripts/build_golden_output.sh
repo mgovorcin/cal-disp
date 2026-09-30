@@ -122,7 +122,7 @@ cat > "${D}/configs/algorithm_parameters.yaml" <<'EOF'
 calibration_options:
   grid_type: constant
   reference_frame: IGS20
-  unwrap_error_correction: true
+  unwrap_error_correction: false
   apply_tropo_correction: true
   apply_solid_earth_tide_correction: true
   window_size_meters: 600000.0

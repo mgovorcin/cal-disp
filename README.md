@@ -227,7 +227,7 @@ Key parameters in `configs/algorithm_parameters.yaml`:
 | `posting_meters` | `30.0` | DISP pixel spacing (30 m for DISP-S1) |
 | `downsample_factor` | `6` | Integer downsampling before surface fitting (1 = disabled) |
 | `calibration_surface_smoothing_method` | `gaussian` | Smoothing filter: `gaussian`, `gaussian_fft`, `hanning_fft`, `savitzky_golay` |
-| `unwrap_error_correction` | `true` | Apply watershed-based unwrap-error correction |
+| `unwrap_error_correction` | `false` | Venti region-offset unwrap-error correction (off: its mask-island segmentation quantises real signal into λ/2 steps) |
 
 ---
 
