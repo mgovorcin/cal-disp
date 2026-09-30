@@ -81,26 +81,65 @@ def get_crs(ds: xr.Dataset) -> str:
 
 
 def compute_transform_from_coords(x: np.ndarray, y: np.ndarray) -> Affine:
-    """Compute affine transform from coordinate arrays."""
-    return Affine.translation(float(x[0]), float(y[0])) * Affine.scale(
-        float(x[1] - x[0]),
-        float(y[1] - y[0]),
+    """Affine transform (upper-left pixel *edge*) from pixel-centre coordinates."""
+    dx = float(x[1] - x[0])
+    dy = float(y[1] - y[0])
+    return Affine.translation(float(x[0]) - dx / 2, float(y[0]) - dy / 2) * (
+        Affine.scale(dx, dy)
     )
 
 
-def compute_stats(data: np.ndarray) -> dict[str, float] | None:
-    """Compute summary statistics for array, ignoring NaN values."""
-    valid_data = data[~np.isnan(data)]
+def geotransform_from_coords(x: np.ndarray, y: np.ndarray) -> str:
+    """GDAL ``GeoTransform`` string for a grid of pixel-centre coordinates.
 
-    if len(valid_data) == 0:
-        return None
+    Matches the DISP-S1 convention (upper-left pixel edge as origin), e.g.
+    ``"71970.0 30.0 0.0 3385920.0 0.0 -30.0"``.
+    """
+    t = compute_transform_from_coords(x, y)
+    return f"{t.c} {t.a} {t.b} {t.f} {t.d} {t.e}"
 
-    return {
-        "mean": float(np.mean(valid_data)),
-        "std": float(np.std(valid_data)),
-        "min": float(np.min(valid_data)),
-        "max": float(np.max(valid_data)),
-    }
+
+def grid_bounds(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, float]:
+    """Outer pixel edges ``(west, south, east, north)`` of a pixel-centre grid."""
+    t = compute_transform_from_coords(x, y)
+    west, north = t.c, t.f
+    east = west + t.a * len(x)
+    south = north + t.e * len(y)
+    return (min(west, east), min(south, north), max(west, east), max(south, north))
+
+
+def bounding_polygon_wkt(
+    x: np.ndarray, y: np.ndarray, crs_wkt: str, points_per_edge: int = 10
+) -> str:
+    """WKT ``POLYGON`` (longitude latitude, WGS 84) of the grid's outer edges.
+
+    Each edge is densified with `points_per_edge` vertices before
+    reprojection so the polygon follows the curved UTM boundary.
+    """
+    from rasterio.warp import transform
+
+    west, south, east, north = grid_bounds(x, y)
+    n = max(points_per_edge, 2)
+    xs = np.concatenate(
+        [
+            np.linspace(west, east, n),  # north edge, W -> E
+            np.full(n, east),  # east edge, N -> S
+            np.linspace(east, west, n),  # south edge, E -> W
+            np.full(n, west),  # west edge, S -> N
+        ]
+    )
+    ys = np.concatenate(
+        [
+            np.full(n, north),
+            np.linspace(north, south, n),
+            np.full(n, south),
+            np.linspace(south, north, n),
+        ]
+    )
+    lons, lats = transform(crs_wkt, "EPSG:4326", xs.tolist(), ys.tolist())
+    ring = [f"{lon:.6f} {lat:.6f}" for lon, lat in zip(lons, lats)]
+    ring.append(ring[0])
+    return "POLYGON((" + ", ".join(ring) + "))"
 
 
 RASTER_CHUNK = 256
@@ -140,3 +179,18 @@ def build_encoding(
         if ds[coord].ndim == 1:
             encoding[str(coord)] = {"_FillValue": None}
     return encoding
+
+
+def compute_stats(data: np.ndarray) -> dict[str, float] | None:
+    """Compute summary statistics for array, ignoring NaN values."""
+    valid_data = data[~np.isnan(data)]
+
+    if len(valid_data) == 0:
+        return None
+
+    return {
+        "mean": float(np.mean(valid_data)),
+        "std": float(np.std(valid_data)),
+        "min": float(np.min(valid_data)),
+        "max": float(np.max(valid_data)),
+    }

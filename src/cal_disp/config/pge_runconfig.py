@@ -45,6 +45,16 @@ class OutputOptions(YamlModel):
         Format for output files (e.g., 'netcdf', 'hdf5').
     compression : bool
         Whether to compress output files.
+    processing_facility : str
+        Product processing facility written to the product identification.
+    product_data_access : str
+        URL (or DOI) where the DISP-CAL products can be retrieved.
+    static_layers_data_access : Optional[str]
+        URL of the frame's DISP static layers product; None takes the value
+        from the input DISP product.
+    source_data_access : Optional[str]
+        URL (or DOI) of the input DISP products; None takes the value from the
+        input DISP product.
 
     """
 
@@ -63,6 +73,34 @@ class OutputOptions(YamlModel):
         description=(
             "Whether to compress output files (gzip level 4 + shuffle, (256, 256)"
             " chunks, as the DISP-S1 input)."
+        ),
+    )
+
+    processing_facility: str = Field(
+        default="NASA Jet Propulsion Laboratory on AWS",
+        description="Product processing facility written to /identification.",
+    )
+
+    product_data_access: str = Field(
+        default=(
+            "https://search.asf.alaska.edu/#/?dataset=OPERA-S1&productTypes=DISP-S1-CAL"
+        ),
+        description="URL (or DOI) where this product can be retrieved.",
+    )
+
+    static_layers_data_access: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL of the DISP static layers product of the frame. If null, taken"
+            " from the input DISP product's identification group."
+        ),
+    )
+
+    source_data_access: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL (or DOI) where the input DISP products can be retrieved. If null,"
+            " taken from the input DISP product's identification group."
         ),
     )
 
@@ -218,6 +256,10 @@ class RunConfig(YamlModel):
             log_file=log_file,
             product_version=self.output_options.product_version,
             compression=self.output_options.compression,
+            processing_facility=self.output_options.processing_facility,
+            product_data_access=self.output_options.product_data_access,
+            static_layers_data_access=self.output_options.static_layers_data_access,
+            source_data_access=self.output_options.source_data_access,
             # Resolve paths to absolute
             keep_paths_relative=False,
         )

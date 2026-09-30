@@ -84,6 +84,34 @@ class CalibrationWorkflow(YamlModel):
         ),
     )
 
+    processing_facility: str = Field(
+        default="NASA Jet Propulsion Laboratory on AWS",
+        description="Product processing facility written to /identification.",
+    )
+
+    product_data_access: str = Field(
+        default=(
+            "https://search.asf.alaska.edu/#/?dataset=OPERA-S1&productTypes=DISP-S1-CAL"
+        ),
+        description="URL (or DOI) where this product can be retrieved.",
+    )
+
+    static_layers_data_access: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL of the DISP static layers product of the frame. If None, taken"
+            " from the input DISP product's identification group."
+        ),
+    )
+
+    source_data_access: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL (or DOI) where the input DISP products can be retrieved. If None,"
+            " taken from the input DISP product's identification group."
+        ),
+    )
+
     # Optional ancillary file groups
     dynamic_ancillary_options: Optional[DynamicAncillaryFileGroup] = Field(
         default=None,

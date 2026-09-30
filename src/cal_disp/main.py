@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import StringIO
 from pathlib import Path
 
 from cal_disp._log import get_max_memory_usage, log_runtime
@@ -11,7 +12,11 @@ from cal_disp.workflow import run_calibration
 
 
 @log_runtime
-def run(runconfig: CalibrationWorkflow, debug: bool = False) -> Path:
+def run(
+    runconfig: CalibrationWorkflow,
+    debug: bool = False,
+    pge_runconfig: str | None = None,
+) -> Path:
     """Run the displacement calibration workflow.
 
     Parameters
@@ -20,6 +25,10 @@ def run(runconfig: CalibrationWorkflow, debug: bool = False) -> Path:
         Workflow configuration for the calibration.
     debug : bool, optional
         Enable debug logging. Default is False.
+    pge_runconfig : str, optional
+        Text of the PGE RunConfig YAML that was run, embedded in the product's
+        ``/metadata/pge_runconfig``. Default: the workflow configuration as
+        YAML.
 
     Returns
     -------
@@ -83,6 +92,11 @@ def run(runconfig: CalibrationWorkflow, debug: bool = False) -> Path:
         Path(sta.event_database_json) if (sta and sta.event_database_json) else None
     )
 
+    if pge_runconfig is None:
+        buf = StringIO()
+        runconfig.to_yaml(buf, with_comments=False)
+        pge_runconfig = buf.getvalue()
+
     # Run calibration
     output_file = run_calibration(
         disp_file=Path(runconfig.input_options.disp_file),
@@ -100,11 +114,15 @@ def run(runconfig: CalibrationWorkflow, debug: bool = False) -> Path:
         n_workers=runconfig.worker_settings.n_workers,
         threads_per_worker=runconfig.worker_settings.threads_per_worker,
         work_directory=runconfig.work_directory,
-        pge_runconfig=str(runconfig._to_yaml_obj()),
+        pge_runconfig=pge_runconfig,
         calibration_reference_version=runconfig.input_options.unr_grid_version,
         calibration_reference_type=runconfig.input_options.unr_grid_type,
         product_version=runconfig.product_version,
         compression=runconfig.compression,
+        processing_facility=runconfig.processing_facility,
+        product_data_access=runconfig.product_data_access,
+        static_layers_data_access=runconfig.static_layers_data_access,
+        source_data_access=runconfig.source_data_access,
     )
 
     # Generate browse image
