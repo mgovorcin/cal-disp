@@ -1,7 +1,10 @@
 """Build auxiliary group for calibration products."""
 
+from __future__ import annotations
+
 import xarray as xr
 
+from ._main import set_coord_attrs
 from ._utils import make_spatial_ref
 
 
@@ -55,8 +58,6 @@ def build_auxiliary_dataset(
                         "long_name": comp.replace("_", " ").title(),
                         "units": "meters",
                         "grid_mapping": "spatial_ref",
-                        "dtype": "float32",
-                        "coordinates": "y x",
                     }
                 )
                 data_vars[comp] = da
@@ -72,8 +73,6 @@ def build_auxiliary_dataset(
                         "long_name": comp.replace("_", " ").title(),
                         "units": "meters",
                         "grid_mapping": "spatial_ref",
-                        "dtype": "float32",
-                        "coordinates": "y x",
                     }
                 )
                 data_vars[comp] = da
@@ -85,7 +84,7 @@ def build_auxiliary_dataset(
             spatial_ref, first.x.values, first.y.values
         )
 
-    ds = xr.Dataset(data_vars)
+    ds = set_coord_attrs(xr.Dataset(data_vars))
 
     # Add group-specific attributes
     ds.attrs.update(

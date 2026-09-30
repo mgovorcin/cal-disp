@@ -317,6 +317,8 @@ class CalProduct:
             spatial_ref=spatial_ref,
             sensor=sensor,
             metadata=global_metadata,
+            reference_date=disp_product.reference_date,
+            secondary_date=disp_product.secondary_date,
         )
         ds_main.to_netcdf(
             output_file,
