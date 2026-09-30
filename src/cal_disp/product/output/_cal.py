@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +22,11 @@ from ._utils import (
     get_crs,
     get_transform,
 )
+
+
+def _utcnow() -> datetime:
+    """Naive UTC now (drop-in for the deprecated ``datetime.utcnow``)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @dataclass
@@ -287,7 +292,7 @@ class CalProduct:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate filename
-        production_date = datetime.utcnow()
+        production_date = _utcnow()
         filename = build_filename(
             disp_product,
             sensor,
@@ -455,7 +460,7 @@ class CalProduct:
 
         # Default processing start time to now if not provided
         if processing_start_datetime is None:
-            processing_start_datetime = datetime.utcnow()
+            processing_start_datetime = _utcnow()
 
         ds_id = build_identification_dataset(
             frame_id=self.frame_id,

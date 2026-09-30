@@ -340,6 +340,7 @@ def run_calibration(
     calibration_reference_type: str | None = None,
     calibration_reference_reference_frame: str = "IGS20",
     # Product metadata
+    product_version: str = "1.0",
     platform_id: str = "S1A",
     absolute_orbit_number: int = 0,  # TODO: extract from DISP identification group
     track_number: int = 0,  # TODO: extract from DISP identification group
@@ -398,6 +399,9 @@ def run_calibration(
         ``'constant'`` or ``'variable'``; must match ``grid_type`` (default).
     calibration_reference_reference_frame : str
         GNSS reference frame (e.g. ``'IGS20'``).
+    product_version : str
+        Product version in ``<major>.<minor>`` format; written to the product
+        filename and identification metadata.
     platform_id : str
         Satellite platform identifier (e.g. ``'S1A'``).
     absolute_orbit_number : int
@@ -718,7 +722,7 @@ def run_calibration(
             "auxiliary_model_3d_resolution": "5km",
             "calibration_resolution": f"{int(x_spacing)}m",
         },
-        version="0.1",
+        version=product_version,
     )
 
     cal_product.add_identification(

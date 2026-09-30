@@ -2,6 +2,8 @@
 
 import xarray as xr
 
+from cal_disp._version import __version__
+
 
 def build_main_dataset(
     calibration: xr.DataArray,
@@ -95,7 +97,7 @@ def build_main_dataset(
             "calibrated displacement"
         ),
         "software": "cal_disp",
-        "software_version": "0.1",
+        "software_version": __version__,
         "reference_document": "TBD",
         "history": "TBD",
     }

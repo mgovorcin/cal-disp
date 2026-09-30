@@ -103,6 +103,7 @@ def run(runconfig: CalibrationWorkflow, debug: bool = False) -> Path:
         pge_runconfig=str(runconfig._to_yaml_obj()),
         calibration_reference_version=runconfig.input_options.unr_grid_version,
         calibration_reference_type=runconfig.input_options.unr_grid_type,
+        product_version=runconfig.product_version,
     )
 
     # Generate browse image

@@ -213,6 +213,7 @@ class RunConfig(YamlModel):
             # Settings
             worker_settings=self.worker_settings,
             log_file=log_file,
+            product_version=self.output_options.product_version,
             # Resolve paths to absolute
             keep_paths_relative=False,
         )
@@ -304,7 +305,7 @@ class RunConfig(YamlModel):
             f"  Frame ID:         {self.input_file_group.frame_id}",
             f"  UNR lookup:       {self.input_file_group.unr_grid_latlon_file}",
             f"  UNR grid dir:     {self.input_file_group.unr_timeseries_dir}",
-            f"  UNR version:         {self.input_file_group.unr_grid_version}",
+            f"  UNR version:      {self.input_file_group.unr_grid_version}",
             f"  UNR type:         {self.input_file_group.unr_grid_type}",
             "",
             "Worker Settings:",

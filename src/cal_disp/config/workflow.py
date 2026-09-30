@@ -68,6 +68,14 @@ class CalibrationWorkflow(YamlModel):
         ),
     )
 
+    product_version: str = Field(
+        default="1.0",
+        description=(
+            "Version of the output product, in <major>.<minor> format. Used in the"
+            " product filename and identification metadata."
+        ),
+    )
+
     # Optional ancillary file groups
     dynamic_ancillary_options: Optional[DynamicAncillaryFileGroup] = Field(
         default=None,
@@ -212,7 +220,10 @@ class CalibrationWorkflow(YamlModel):
 
         logger = logging.getLogger("cal_disp")
         logger.setLevel(level)
-        logger.handlers.clear()
+        # Close existing handlers so repeated setup does not leak file handles
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
 
         # Console handler
         console_handler = logging.StreamHandler()
@@ -253,6 +264,7 @@ class CalibrationWorkflow(YamlModel):
             f"  Output directory: {self.output_directory}",
             f"  Log file:         {self.log_file}",
             f"  Keep relative:    {self.keep_paths_relative}",
+            f"  Product version:  {self.product_version}",
             "",
         ]
 
@@ -265,8 +277,7 @@ class CalibrationWorkflow(YamlModel):
                     f"  Frame ID:         {self.input_options.frame_id}",
                     f"  UNR lookup:       {self.input_options.unr_grid_latlon_file}",
                     f"  UNR grid dir:     {self.input_options.unr_timeseries_dir}",
-                    "",
-                    f"  UNR version:         {self.input_options.unr_grid_version}",
+                    f"  UNR version:      {self.input_options.unr_grid_version}",
                     f"  UNR type:         {self.input_options.unr_grid_type}",
                 ]
             )
