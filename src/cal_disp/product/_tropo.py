@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+import rioxarray  # noqa: F401  (registers the .rio accessor)
 import xarray as xr
 from rasterio.crs import CRS
 from rasterio.enums import Resampling

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import rioxarray  # noqa: F401  (registers the .rio accessor)
+
 from cal_disp.product import (
     DispProduct,
     StaticLayer,
