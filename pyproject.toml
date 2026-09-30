@@ -177,7 +177,7 @@ python = ">=3.11,<3.14"
 gdal = "*"
 libgdal-netcdf = "*"
 geopandas = "*"
-rasterio = "*"
+rasterio = ">=1.5"
 rioxarray = "*"
 shapely = "*"
 h5py = "*"
@@ -225,7 +225,8 @@ mkdocs-jupyter = ">=0.25"
 [tool.pixi.environments]
 default = { solve-group = "default" }
 dev = { features = ["test", "dev"], solve-group = "default" }
-docs = { features = ["docs"], solve-group = "default" }
+# Own solve-group: the docs toolchain must not constrain the runtime stack
+docs = { features = ["docs"], solve-group = "docs" }
 
 [tool.pixi.tasks]
 test = { cmd = "pytest", description = "Run the test suite" }

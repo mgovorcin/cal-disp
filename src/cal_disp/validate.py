@@ -52,9 +52,10 @@ PRODUCT_GROUPS: tuple[str, ...] = ("main", "identification", "metadata", "auxili
 #: ``variable`` is ``""`` for group attributes and ``"*"`` for every variable
 #: of the group. Keep this list short: everything not listed is compared.
 IGNORED_ATTRS: dict[tuple[str, str], frozenset[str]] = {
-    # Package version of the build that wrote the file, and the HDF5/h5netcdf
-    # library versions recorded by the writer.
-    ("main", ""): frozenset({"software_version", "_NCProperties"}),
+    # Package version of the build that wrote the file, the HDF5/h5netcdf
+    # library versions recorded by the writer, and the creation-time
+    # ``history`` line (timestamp + version).
+    ("main", ""): frozenset({"software_version", "_NCProperties", "history"}),
 }
 
 #: Scalar variables whose *value* is volatile: production time, build

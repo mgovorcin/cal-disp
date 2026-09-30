@@ -173,6 +173,13 @@ def test_catches_geotransform_mismatch(reference_product, test_product, caplog):
         f["spatial_ref"].attrs["GeoTransform"] = "0 1 0 0 0 -1"
     ok, log = _validate(reference_product, test_product, caplog)
     assert not ok
+    assert "spatial_ref: GeoTransform '0 1 0 0 0 -1', expected '" in log
+
+    # A reference without GeoTransform (products written before it was kept)
+    with h5py.File(reference_product, "a") as f:
+        del f["spatial_ref"].attrs["GeoTransform"]
+    ok, log = _validate(reference_product, test_product, caplog)
+    assert not ok
     assert "spatial_ref: GeoTransform missing from the reference" in log
 
     with h5py.File(reference_product, "a") as f:
@@ -198,9 +205,21 @@ def test_catches_global_attribute_change(reference_product, test_product, caplog
     assert "group attribute 'title'" in log
 
 
-def test_catches_dtype_change(sample_disp_product, reference_product, tmp_path, caplog):
-    other = _build_product(sample_disp_product, tmp_path / "f64", cal_dtype=np.float64)
-    ok, log = _validate(reference_product, other, caplog)
+def test_catches_dtype_change(reference_product, test_product, caplog):
+    # The writer always encodes rasters as float32, so change the on-disk
+    # dtype directly: replace each raster by a float64 copy with its attrs.
+    with h5py.File(test_product, "a") as f:
+        for name in ("calibration", "calibration_std"):
+            old = f[name]
+            data, attrs = old[...].astype(np.float64), dict(old.attrs)
+            scales = [[s[1].name for s in dim.items()] for dim in old.dims]
+            del f[name]
+            ds = f.create_dataset(name, data=data)
+            ds.attrs.update(attrs)
+            for dim, names in zip(ds.dims, scales):
+                for scale_name in names:
+                    dim.attach_scale(f[scale_name])
+    ok, log = _validate(reference_product, test_product, caplog)
     assert not ok
     assert "calibration: dtype float64, expected float32" in log
     assert "calibration_std: dtype float64, expected float32" in log
