@@ -175,12 +175,20 @@ Compare a new output against a reference product:
 ```bash
 cal-disp validate reference.nc output.nc
 
-# Custom tolerance
+# Custom tolerance (default 1e-6): --tolerance sets both --rtol and --atol
 cal-disp validate reference.nc output.nc --tolerance 1e-5
+cal-disp validate reference.nc output.nc --rtol 1e-5 --atol 1e-7
 
-# Validate only the main data group
+# Only the root, identification and metadata groups (skip the auxiliary group)
 cal-disp validate reference.nc output.nc --group main
 ```
+
+The comparison covers every group (a missing group is a failure), each
+variable's dtype, shape, attributes and values (reference zeros included), the
+CRS and grid transform, the identification and metadata values, and the browse
+PNG next to the output (at most 2048 px per side). Only build versions, the
+processing start time and the embedded runconfig are ignored. All differences
+are listed and the command exits with status 1 if there is any.
 
 ### Golden dataset
 
