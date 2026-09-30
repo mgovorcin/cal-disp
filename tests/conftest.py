@@ -688,23 +688,3 @@ def reset_random_state() -> Iterator[None]:
     """Reset numpy random state before each test."""
     np.random.seed(42)
     yield
-
-
-def pytest_configure(config):
-    """Add custom markers."""
-    config.addinivalue_line(
-        "markers",
-        "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    )
-    config.addinivalue_line(
-        "markers",
-        "integration: integration tests requiring external data or services",
-    )
-    config.addinivalue_line(
-        "markers",
-        "requires_earthdata: tests requiring Earthdata credentials",
-    )
-    config.addinivalue_line(
-        "markers",
-        "requires_network: tests requiring network access",
-    )
