@@ -99,6 +99,33 @@ def geotransform_from_coords(x: np.ndarray, y: np.ndarray) -> str:
     return f"{t.c} {t.a} {t.b} {t.f} {t.d} {t.e}"
 
 
+def make_spatial_ref(
+    spatial_ref: xr.DataArray, x: np.ndarray, y: np.ndarray
+) -> xr.DataArray:
+    """``spatial_ref`` variable for the grid (`y`, `x`).
+
+    The CRS attributes of the input (``crs_wkt`` and the CF grid-mapping
+    attributes) are kept verbatim; ``GeoTransform`` is set for this grid so
+    the variable stays georeferenced when written for a coarser grid too.
+    If the input carries only ``crs_wkt``, the CF grid-mapping attributes
+    are derived from it.
+    """
+    attrs = {
+        k: v.item() if isinstance(v, np.ndarray) and v.size == 1 else v
+        for k, v in spatial_ref.attrs.items()
+    }
+    if "grid_mapping_name" not in attrs and attrs.get("crs_wkt"):
+        import pyproj
+
+        attrs = {**pyproj.CRS.from_wkt(attrs["crs_wkt"]).to_cf(), **attrs}
+    attrs["GeoTransform"] = geotransform_from_coords(x, y)
+    attrs.setdefault("units", "unitless")
+    attrs.setdefault(
+        "long_name", "Dummy variable with geo-referencing metadata in attributes"
+    )
+    return xr.DataArray(np.int64(0), attrs=attrs, name="spatial_ref")
+
+
 def grid_bounds(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, float]:
     """Outer pixel edges ``(west, south, east, north)`` of a pixel-centre grid."""
     t = compute_transform_from_coords(x, y)

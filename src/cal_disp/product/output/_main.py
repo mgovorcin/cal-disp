@@ -4,6 +4,8 @@ import xarray as xr
 
 from cal_disp._version import __version__
 
+from ._utils import make_spatial_ref
+
 
 def build_main_dataset(
     calibration: xr.DataArray,
@@ -21,7 +23,8 @@ def build_main_dataset(
     calibration_std : xr.DataArray or None
         Calibration uncertainty at full resolution.
     spatial_ref : xr.DataArray or None
-        Spatial reference data variable from input DISP product.
+        Spatial reference data variable from input DISP product. Its CRS
+        attributes are kept verbatim; ``GeoTransform`` is set for this grid.
     sensor : str
         Sensor type: "S1" or "NI".
     metadata : dict[str, str] or None
@@ -33,8 +36,6 @@ def build_main_dataset(
         Main dataset with calibration data and attributes.
 
     """
-    import rioxarray  # noqa: F401
-
     data_vars: dict[str, xr.DataArray] = {}
 
     # Calibration with description
@@ -66,17 +67,13 @@ def build_main_dataset(
         )
         data_vars["calibration_std"] = calibration_std
 
-    # Spatial reference
+    # Spatial reference: DISP CRS attributes + GeoTransform of this grid
     if spatial_ref is not None:
-        data_vars["spatial_ref"] = spatial_ref
+        data_vars["spatial_ref"] = make_spatial_ref(
+            spatial_ref, calibration.x.values, calibration.y.values
+        )
 
     ds = xr.Dataset(data_vars)
-
-    # Write CRS if available
-    if spatial_ref is not None:
-        crs_wkt = spatial_ref.attrs.get("crs_wkt")
-        if crs_wkt:
-            ds = ds.rio.write_crs(crs_wkt)
 
     # Add global attributes with type information
     base_attrs = {
