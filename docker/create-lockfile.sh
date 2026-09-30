@@ -5,6 +5,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# shellcheck disable=SC2016  # the backticks in the help text are literal
 readonly HELP='usage: ./create-lockfile.sh --file ENVFILE [--pkgs PACKAGE ...] [--no-docker] > specfile.txt
 
 Create a conda lockfile (an @EXPLICIT spec with md5 checksums) from an
@@ -56,19 +57,17 @@ sort_pkglist() {
 }
 
 install_packages_docker() {
-    local ENVFILE=$(realpath "$1")
+    local ENVFILE
+    ENVFILE=$(realpath "$1")
     shift
-    local PACKAGES="$@"
 
     sanitize_envfile "$ENVFILE"
 
-    # Prepare arguments for the command
+    # Prepare arguments for the command. The extra packages are joined into
+    # one string for the container's shell (an unindexed array expansion
+    # passed only the first package).
     local FILE_ARG="--file /tmp/environment.yml"
-    if [[ -n "$PACKAGES" ]]; then
-        PKGS_ARGS=(${PACKAGES[@]})
-    else
-        PKGS_ARGS=""
-    fi
+    local PKGS_ARGS="$*"
 
     # Get concretized package list.
     local PKGLIST
@@ -82,7 +81,8 @@ install_packages_docker() {
 }
 
 install_packages_local() {
-    local ENVFILE=$(realpath "$1")
+    local ENVFILE
+    ENVFILE=$(realpath "$1")
     shift
     local PACKAGES=("$@")
 
@@ -168,11 +168,9 @@ main() {
     if [[ "$USE_DOCKER" -eq 0 ]]; then
         # ${arr[@]+"${arr[@]}"}: an empty array is not "unbound" (bash 3.2)
         install_packages_local "$ENVFILE" ${PACKAGES[@]+"${PACKAGES[@]}"}
-    elif [[ "${#PACKAGES[@]}" -eq 0 ]]; then
-        # If no packages were passed, install only the packages in the environment file.
-        install_packages_docker "$ENVFILE"
     else
-        install_packages_docker "$ENVFILE" "${PACKAGES[@]}"
+        # If no packages were passed, only the environment file is installed.
+        install_packages_docker "$ENVFILE" ${PACKAGES[@]+"${PACKAGES[@]}"}
     fi
 }
 
