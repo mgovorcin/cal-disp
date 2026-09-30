@@ -19,6 +19,7 @@ import numpy as np
 import rasterio
 import xarray as xr
 
+from cal_disp._version import __version__
 from cal_disp.config._algorithm import AlgorithmParameters
 from cal_disp.product import CalProduct, DispProduct
 
@@ -741,7 +742,9 @@ def run_calibration(
         except importlib.metadata.PackageNotFoundError:
             return "unknown"
 
-    cal_disp_version = _pkg_version("cal-disp")
+    # The package's own version, not the installed distribution's: for an
+    # editable install the dist-info is only refreshed on reinstall.
+    cal_disp_version = __version__
     venti_version = _pkg_version("venti")
 
     _buf = StringIO()
