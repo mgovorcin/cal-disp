@@ -78,7 +78,7 @@ class CalProduct:
         Path to the calibration product NetCDF file.
     frame_id : int
         OPERA frame identifier.
-    primary_date : datetime
+    reference_date : datetime
         Earlier acquisition date (reference).
     secondary_date : datetime
         Later acquisition date.

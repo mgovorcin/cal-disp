@@ -206,10 +206,10 @@ nbconvert = "*"
 nbformat = "*"
 
 [tool.pixi.feature.docs.dependencies]
-mkdocs = "*"
-mkdocs-material = "*"
-mkdocstrings-python = "*"
-mkdocs-jupyter = "*"
+mkdocs = ">=1.6"
+mkdocs-material = ">=9.5"
+mkdocstrings-python = ">=1.10"
+mkdocs-jupyter = ">=0.25"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
