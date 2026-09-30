@@ -137,5 +137,81 @@ filterwarnings = [
   # DeprecationWarning thrown in pkg_resources for older numba verions and llvmlite
   "ignore:.*pkg_resources.*",
   "ignore:h5py is running against HDF5.*:UserWarning",
+  # Benign Cython ABI notice from conda-forge's abi3 netCDF4 build
+  "ignore:numpy.ndarray size changed, may indicate binary incompatibility:RuntimeWarning",
+  # rasterio.transform uses the deprecated Affine `*` operator (affine >= 3)
+  "ignore:Use `@` matmul instead of `\\*` mul operator:PendingDeprecationWarning",
   "ignore:Exception ignored in.* <_io.FileIO.*:pytest.PytestUnraisableExceptionWarning"
 ]
+
+# ---------------------------------------------------------------------------
+# pixi (https://pixi.sh): reproducible conda + PyPI environments and tasks.
+#   pixi install            # default env: runtime + download extra
+#   pixi run test           # dev env: pytest
+#   pixi run lint           # dev env: pre-commit on all files
+#   pixi shell -e dev       # activate the dev env
+# The conda layer mirrors environment.yml; cal-disp itself (and its PyPI-only
+# dependencies such as venti and opera-utils) is installed editable via pip.
+# ---------------------------------------------------------------------------
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.11"
+# C-extension packages best installed via conda (share one GDAL/HDF5 stack)
+gdal = "*"
+libgdal-netcdf = "*"
+geopandas = "*"
+rasterio = "*"
+rioxarray = "*"
+shapely = "*"
+h5py = "*"
+h5netcdf = "*"
+netcdf4 = "*"
+numpy = "*"
+scipy = "*"
+xarray = "*"
+pandas = "*"
+pydantic = ">=2.0"
+pyproj = ">=3.3"
+requests = "*"
+urllib3 = "*"
+tqdm = "*"
+"ruamel.yaml" = "*"
+click = "*"
+matplotlib-base = "*"
+cmap = "*"
+pip = "*"
+
+[tool.pixi.pypi-dependencies]
+cal-disp = { path = ".", editable = true, extras = ["download"] }
+
+[tool.pixi.feature.test.dependencies]
+pytest = "*"
+pytest-randomly = "*"
+pyyaml = "*"
+
+[tool.pixi.feature.dev.dependencies]
+pre-commit = "*"
+ruff = "*"
+black = "*"
+mypy = "*"
+
+[tool.pixi.feature.docs.dependencies]
+mkdocs = "*"
+mkdocs-material = "*"
+mkdocstrings-python = "*"
+mkdocs-jupyter = "*"
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["test", "dev"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+
+[tool.pixi.tasks]
+test = { cmd = "pytest", description = "Run the test suite" }
+lint = { cmd = "pre-commit run --all-files", description = "Run ruff/black/mypy via pre-commit" }
+docs = { cmd = "mkdocs serve", description = "Serve the documentation locally" }
+build-golden = { cmd = "bash scripts/build_golden_output.sh", description = "Build the golden dataset (needs ~/.netrc Earthdata login)" }
+validate = { cmd = "bash scripts/run_validation.sh", description = "Validate this install against a golden dataset: pixi run validate --golden-dir DIR" }

@@ -40,6 +40,27 @@ python -m pip install -e "cal-disp[download]"
 python -m pip install -e cal-disp/
 ```
 
+### Setup with pixi
+
+[pixi](https://pixi.sh) creates the same conda + pip environment from the
+`[tool.pixi]` tables in `pyproject.toml`, locked in `pixi.lock`, with no
+manual activation step:
+
+```bash
+git clone https://github.com/opera-adt/cal-disp.git
+cd cal-disp
+pixi install            # runtime environment with the download extra
+pixi run cal-disp --help
+
+pixi run -e dev test    # run the test suite in the dev environment
+pixi run -e dev lint    # pre-commit (ruff, black, mypy) on all files
+pixi shell -e dev       # open a shell with the dev environment activated
+```
+
+Other tasks: `pixi run build-golden` and `pixi run validate --golden-dir DIR`
+wrap the scripts in `scripts/`. Re-run `pixi install` after pulling changes
+to `pyproject.toml` or `pixi.lock`.
+
 **Docker:** See [Docker_README](docker/README.md)
 
 ---
