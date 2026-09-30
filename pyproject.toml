@@ -197,6 +197,10 @@ pre-commit = "*"
 ruff = "*"
 black = "*"
 mypy = "*"
+# Executing the fix-inspection notebooks in docs/notebooks/
+ipykernel = "*"
+nbconvert = "*"
+nbformat = "*"
 
 [tool.pixi.feature.docs.dependencies]
 mkdocs = "*"
