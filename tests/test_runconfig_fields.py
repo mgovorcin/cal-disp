@@ -54,7 +54,9 @@ def groups(
     }
 
 
-def _workflow(tmp_path: Path, groups: dict, static=None, **dynamic) -> CalibrationWorkflow:
+def _workflow(
+    tmp_path: Path, groups: dict, static=None, **dynamic
+) -> CalibrationWorkflow:
     return CalibrationWorkflow(
         input_options=InputFileGroup(**groups["input"]),
         dynamic_ancillary_options=DynamicAncillaryFileGroup(
@@ -206,13 +208,15 @@ class TestUnsupportedFields:
         )
         yaml_file = tmp_path / "runconfig.yaml"
         config.to_yaml(yaml_file)
-        assert RunConfig.from_yaml_file(yaml_file).output_options.output_format == (
-            "netcdf"
+        assert (
+            RunConfig.from_yaml_file(yaml_file).output_options.output_format == "netcdf"
         )
 
         text = yaml_file.read_text()
         assert "output_format: netcdf" in text
-        yaml_file.write_text(text.replace("output_format: netcdf", "output_format: hdf5"))
+        yaml_file.write_text(
+            text.replace("output_format: netcdf", "output_format: hdf5")
+        )
         with pytest.raises(ValidationError, match="not supported in this release"):
             RunConfig.from_yaml_file(yaml_file)
 
