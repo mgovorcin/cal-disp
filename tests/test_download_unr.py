@@ -187,10 +187,9 @@ def test_empty_file_is_not_trusted(tmp_path: Path, http_url, session, monkeypatc
 class _FakeResponse:
     """Minimal streaming response for URL checks with a mock session."""
 
-    headers = {"Content-Type": "text/plain"}
-
-    def __init__(self, body: bytes):
+    def __init__(self, body: bytes, headers: dict[str, str] | None = None):
         self._body = body
+        self.headers = {"Content-Type": "text/plain", **(headers or {})}
 
     def __enter__(self):
         return self
@@ -203,6 +202,36 @@ class _FakeResponse:
 
     def iter_content(self, chunk_size):  # noqa: ARG002
         yield self._body
+
+
+@pytest.mark.parametrize(
+    ("headers", "rejected"),
+    [
+        ({"Content-Length": "100"}, True),
+        ({"Content-Length": "21"}, False),
+        ({}, False),
+        # Encoded bodies: the header counts encoded bytes, so it is not compared
+        ({"Content-Length": "100", "Content-Encoding": "gzip"}, False),
+    ],
+)
+def test_content_length_checked(tmp_path: Path, headers, rejected):
+    """Our own length check, for clients that do not enforce Content-Length.
+
+    urllib3 >= 2 raises on a short body by itself (the local-server test
+    above), urllib3 1.x returned it silently.
+    """
+    session = MagicMock()
+    session.get.return_value = _FakeResponse(b"2022.0 0 0 0 1 1 1 0\n", headers)
+    out = tmp_path / "x.tenv8"
+
+    if rejected:
+        with pytest.raises(DownloadError, match="Content-Length is 100"):
+            download_file("https://example.invalid/x", out, session=session)
+        assert not out.exists()
+    else:
+        assert download_file("https://example.invalid/x", out, session=session) == out
+        assert out.read_bytes() == b"2022.0 0 0 0 1 1 1 0\n"
+    assert not (tmp_path / "x.tenv8.part").exists()
 
 
 @pytest.mark.parametrize(
