@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_validator
 
 from ._utils import DirectoryPath
 from ._yaml import STRICT_CONFIG_WITH_ALIASES, ValidationResult, YamlModel
@@ -15,6 +16,12 @@ from .workflow import (
     WorkerSettings,
 )
 
+logger = logging.getLogger(__name__)
+
+#: The only product type and output format this release writes.
+PRODUCT_TYPE = "DISP_CAL"
+OUTPUT_FORMAT = "netcdf"
+
 
 class PrimaryExecutable(YamlModel):
     """Group describing the primary executable.
@@ -22,12 +29,14 @@ class PrimaryExecutable(YamlModel):
     Attributes
     ----------
     product_type : str
-        Product type identifier for the PGE.
+        Product type identifier for the PGE. Informational: the SAS always
+        writes DISP-CAL products, and `RunConfig.to_workflow` warns when
+        another value is given.
 
     """
 
     product_type: str = Field(
-        default="DISP_CAL",
+        default=PRODUCT_TYPE,
         description="Product type of the PGE.",
     )
 
@@ -42,7 +51,8 @@ class OutputOptions(YamlModel):
     product_version : str
         Version of the product in <major>.<minor> format.
     output_format : str
-        Format for output files (e.g., 'netcdf', 'hdf5').
+        Format for output files. Only 'netcdf' is supported in this release;
+        any other value raises.
     compression : bool
         Whether to compress output files.
 
@@ -54,14 +64,25 @@ class OutputOptions(YamlModel):
     )
 
     output_format: str = Field(
-        default="netcdf",
-        description="Output file format.",
+        default=OUTPUT_FORMAT,
+        description="Output file format. Only 'netcdf' is supported.",
     )
 
     compression: bool = Field(
         default=True,
         description="Whether to compress output files.",
     )
+
+    @field_validator("output_format")
+    @classmethod
+    def _only_netcdf(cls, v: str) -> str:
+        """Fail for formats the writer cannot produce."""
+        if v != OUTPUT_FORMAT:
+            raise ValueError(
+                f"output_format={v!r} is not supported in this release; the product"
+                f" is always written as {OUTPUT_FORMAT!r}"
+            )
+        return v
 
     model_config = ConfigDict(extra="forbid")
 
@@ -181,7 +202,10 @@ class RunConfig(YamlModel):
         """Convert PGE RunConfig to a CalibrationWorkflow object.
 
         This method translates the PGE-style configuration into the format
-        expected by CalibrationWorkflow.
+        expected by CalibrationWorkflow. PGE fields the SAS does not use are
+        reported with a WARNING instead of being dropped silently:
+        ``product_path_group.product_path`` (products are written to
+        ``sas_output_path``) and ``primary_executable.product_type``.
 
         Returns
         -------
@@ -195,6 +219,22 @@ class RunConfig(YamlModel):
         >>> workflow.create_directories()
 
         """
+        paths = self.product_path_group
+        if paths.product_path.resolve() != paths.output_path.resolve():
+            logger.warning(
+                "product_path_group.product_path (%s) is not used by the SAS:"
+                " products are written to sas_output_path (%s)",
+                paths.product_path,
+                paths.output_path,
+            )
+        if self.primary_executable.product_type != PRODUCT_TYPE:
+            logger.warning(
+                "primary_executable.product_type=%r is not used: this SAS always"
+                " writes %s products",
+                self.primary_executable.product_type,
+                PRODUCT_TYPE,
+            )
+
         # Set up log file
         log_file = self.log_file
         if log_file is None:

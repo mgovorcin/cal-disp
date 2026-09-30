@@ -139,7 +139,9 @@ cal-disp config \
     --work-dir scratch/
 ```
 
-This writes `runconfig.yaml` to the work directory (`scratch/` by default). Use `-c` to set a custom output path.
+This writes `runconfig.yaml` into the work directory (`--work-dir`). Use
+`-c PATH` to write it elsewhere: the path is used as given, directories included
+(e.g. `-c configs/runconfig.yaml`).
 
 **Optional flags:**
 
@@ -147,10 +149,8 @@ This writes `runconfig.yaml` to the work directory (`scratch/` by default). Use 
 |---|---|
 | `--ref-tropo-files` | TROPO files for reference date (repeat for multiple) |
 | `--sec-tropo-files` | TROPO files for secondary date (repeat for multiple) |
-| `--iono-files` | Ionospheric correction files |
-| `--tiles-files` | Calibration tile bounds files |
-| `--mask-file` | Byte mask (0=invalid, 1=good) |
-| `--algorithm-overrides` | Frame-specific parameter overrides (JSON) |
+| `--mask-file` | Byte mask (0=invalid, 1=good); recorded but **not applied** in this release (the run logs a warning) |
+| `--algorithm-overrides` | Frame-specific parameter overrides (JSON), applied on top of `--algorithm-params`, e.g. `{"8882": {"downsample_factor": 3}}` |
 | `--defo-area-db` | Deforming areas database (GeoJSON) |
 | `--event-db` | Events database (GeoJSON) |
 | `-w` / `--n-workers` | Number of parallel workers (default: 4) |

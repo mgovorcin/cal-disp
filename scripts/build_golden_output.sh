@@ -158,8 +158,7 @@ cal-disp config \
     -o  "${D}/output" \
     --work-dir "${D}/output/_work" \
     --keep-relative \
-    -c  runconfig.yaml > /dev/null
-mv "${D}/output/_work/runconfig.yaml" "${D}/configs/runconfig.yaml"
+    -c  "${D}/configs/runconfig.yaml" > /dev/null
 rm -rf "${D}/output/_work"
 
 # 3. Golden run
