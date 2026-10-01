@@ -74,6 +74,11 @@ On hosts with fragmented transparent huge pages, set
 `NUMPY_MADVISE_HUGEPAGE=0`; otherwise full-frame runs can be many times
 slower.
 
+## Planned work
+
+Deferred items, including those that would change the golden dataset, are
+tracked in [TODO.md](https://github.com/opera-adt/cal-disp/blob/main/TODO.md).
+
 ## Release checklist
 
 1. `pixi run test` and `pixi run lint` pass.
