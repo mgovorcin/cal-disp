@@ -34,6 +34,19 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
   references the first island; see `docs/notebooks/01_unwrap_cycle_length.ipynb`.
   Needs a phase-discontinuity segmentation in Venti and validation on products
   with known unwrapping errors before it is enabled (*changes the golden*).
+- [ ] **Add the unwrapping shifts back into CAL** (do together with the item
+  above). CAL should hold every term removed before the fit (troposphere, SET,
+  unwrapping shifts, reference offset) plus the fitted surface, so that
+  `DISP - CAL` matches the GNSS field at long wavelengths. Venti's
+  `estimate_calibration_surface` (`venti/surface.py`) adds back
+  `total_correction` and `disp0` but not the `correct_region_offset` shifts,
+  which only reach the copy used for the fit; with the correction enabled the
+  calibrated DISP would keep the unwrapping errors. Return the per-pixel shift
+  (multiples of λ/2) from Venti and add it to the surface. Test case: on
+  F08882 the coastal strip at E 327-343 km, N 3249-3261 km (UTM 15N; DISP
+  connected component 10, cut off from the mainland by water) sits
+  +3 x λ/2 (8.3 cm) above the mainland after calibration, in both the gamma
+  0.3 delivery and the current golden; CAL there should rise by 8.3 cm.
 - [ ] **Fitted surface near masked areas** (Venti, *changes the golden*):
   unfitted blocks are 0 rather than NaN before upsampling, which pulls the
   plane toward 0 within a few pixels of masked blocks; `_find_data_extent` is
