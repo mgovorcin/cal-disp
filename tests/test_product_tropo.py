@@ -162,6 +162,12 @@ def test_interpolate_to_dem_surface_is_float32_for_float16_dem():
     assert len(np.unique(out.values)) > 0.9 * out.size
     assert len(np.unique(quantised)) < 0.5 * len(np.unique(out.values))
 
+    # Row-block interpolation (memory bound) gives bit-identical output,
+    # including a block size that does not divide the number of rows
+    for block_rows in (1, 7, ny + 5):
+        blocked = interpolate_to_dem_surface(cube, dem16, block_rows=block_rows)
+        np.testing.assert_array_equal(blocked.values, out.values)
+
 
 def test_repr():
     """Should have readable repr."""
