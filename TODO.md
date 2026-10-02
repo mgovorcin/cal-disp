@@ -57,6 +57,23 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
   connected component 10, cut off from the mainland by water) sits
   +3 x λ/2 (8.3 cm) above the mainland after calibration, in both the gamma
   0.3 delivery and the current golden; CAL there should rise by 8.3 cm.
+- [ ] **Non-whole-cycle offsets from the DOLPHIN L1 inversion.** The
+  unwrapping correction only removes whole cycles (λ/2), but DOLPHIN
+  inverts a redundant interferogram network with an L1 norm: where the
+  network disagrees by whole cycles and the paths tie, the solver can return
+  an intermediate value, leaving an offset that is not a multiple of λ/2 and
+  is never caught by rounding. Check on F08882 (one DISP date):
+  `timeseries_inversion_residuals` / 2π is within 0.05 of an integer for 91 %
+  of pixels and ≥ 1 cycle for 11.7 % of valid pixels, so the network does
+  disagree by whole cycles; the fractional jumps of the 30 DISP components
+  pile up near half a cycle (6 of 30 at 0.45-0.5, about 3 expected), but
+  they do not correlate with the per-component share of inconsistent pixels
+  (Spearman ρ = 0.13, p = 0.5): suggestive, not shown. A real test needs the
+  DISP time series (does a fractional step appear between consecutive dates
+  where the residual changes?) or DOLPHIN's unwrapped interferograms and
+  network for a frame. If confirmed, the correction needs a non-integer
+  branch (e.g. a free offset per region, with stricter rules) for regions
+  flagged by the inversion residual.
 - [ ] **Fitted surface near masked areas** (Venti, *changes the golden*):
   unfitted blocks are 0 rather than NaN before upsampling, which pulls the
   plane toward 0 within a few pixels of masked blocks; `_find_data_extent` is
