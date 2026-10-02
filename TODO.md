@@ -42,7 +42,17 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
   `total_correction` and `disp0` but not the `correct_region_offset` shifts,
   which only reach the copy used for the fit; with the correction enabled the
   calibrated DISP would keep the unwrapping errors. Return the per-pixel shift
-  (multiples of λ/2) from Venti and add it to the surface. Test case: on
+  (multiples of λ/2) from Venti and add it to the surface.
+  Order: the unwrapping error is in the raw unwrapped phase, so the shift
+  is applied to the raw DISP first, before the troposphere and SET
+  corrections (today Venti removes the corrections first and corrects
+  unwrapping afterwards). Caveat for *estimating* the cycle count: on the
+  F08882 test case below the jump measured on the raw DISP is 2.38 x λ/2 but
+  2.92 x λ/2 once the troposphere is removed (the differential delay across
+  the bay biases it), so rounding the raw jump would give 2 cycles instead of
+  3. Either estimate on the corrected DISP and apply the integer shift to the
+  raw DISP, or accept a shift only when the raw jump is close to an integer
+  number of cycles. Test case: on
   F08882 the coastal strip at E 327-343 km, N 3249-3261 km (UTM 15N; DISP
   connected component 10, cut off from the mainland by water) sits
   +3 x λ/2 (8.3 cm) above the mainland after calibration, in both the gamma
