@@ -96,6 +96,27 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
   `run_calibration` takes no external mask yet.
 - [ ] **NISAR**: `StaticLayer` filename pattern is Sentinel-1 only.
 
+- [ ] **CAL is not calibrated outside `recommended_mask`** (*changes the
+  golden*). Venti's `fit_windowed_plane`
+  (`venti/filtering/moving_window.py`) multiplies the Hann taper by `valid`,
+  so a downsampled cell with no valid pixel gets weight 0 and the surface stays
+  **0** there. `estimate_calibration_surface` then adds back only the
+  corrections and `disp0`. On the golden pair (600 km, tropo off), CAL − SET is
+  exactly −14.757 mm (= `disp0`) over all fully masked cells (13% of the
+  frame). Around them, bilinear upsampling blends 0 with the real fit. CAL
+  deviates from the smooth surface by ±50 mm (p1/p99) on invalid pixels and by
+  up to ~13 mm (p1) on valid pixels next to them. Users applying `DISP − CAL`
+  outside the mask, or near its edges, get no GNSS tie. Fix in Venti: evaluate
+  each window's plane on every pixel of the window and keep `valid` only for
+  the fit (or fill `weight_sum == 0` cells from the surface before upsampling).
+  Check: CAL − corrections is smooth everywhere
+  (`gamma_release/cal_algebra_check.py`). Prototype (monkeypatch, plane over
+  the whole window, one weight per window = valid fraction, Gaussian fill of
+  uncovered cells): `gamma_release/continuous_surface/`. On the golden pair it
+  cuts the high-pass (<50 km) of CAL − SET from ~10 to ~1 mm, cuts
+  DISP − CAL − GNSS on masked pixels from ~30 to 22–25 mm RMS, and slightly
+  improves valid pixels (21.5 → 20.7 mm at 600 km).
+
 ## Performance
 
 - [ ] Peak memory is about 18 GB per frame. Largest contributors: the float64
