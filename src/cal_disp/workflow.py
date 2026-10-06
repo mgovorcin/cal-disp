@@ -634,16 +634,14 @@ def run_calibration(
         weights = ds_disp.temporal_coherence.values.astype(np.float32)
 
     ref_point = _find_reference_point(ds_disp, mask, work_directory)
-    # Cycle length of an unwrapping error: λ/2 (two-way path), derived from
-    # the product's radar wavelength so other sensors (e.g. NISAR) are
-    # handled too.  Venti calls this argument `wavelength_m` but uses it as
-    # the value region offsets are rounded to.
+    # Radar wavelength from the product so other sensors (e.g. NISAR) are
+    # handled too. Venti turns it into the unwrapping cycle, lambda/2 of LOS
+    # displacement (`_unwrap_cycle_length_m`, kept for the walkthrough).
     wavelength_m = (
         _read_wavelength_m(disp_file)
         if cal.unwrap_error_correction
         else SENTINEL1_WAVELENGTH_M
     )
-    unwrap_cycle_m = _unwrap_cycle_length_m(wavelength_m)
 
     logger.info(
         "Fitting calibration surface (window=%d px, downsample=%d, corrections:"
@@ -664,7 +662,9 @@ def run_calibration(
             gnss_los_std=gnss_los_std if cal.weight_fit_by_gnss_uncertainty else None,
             event_mask=event_mask,
             options=cal.to_venti(),
-            wavelength_m=unwrap_cycle_m,
+            # Venti >= the T16.3 fix halves the wavelength itself; passing the
+            # cycle length here would round region offsets to lambda/4.
+            wavelength_m=wavelength_m,
             downsample_factor=cal.downsample_factor,
             downsample_method=cal.downsample_method,
             downsample_weights=weights,
