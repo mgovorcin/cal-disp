@@ -234,6 +234,7 @@ docs = { features = ["docs"], solve-group = "docs" }
 
 [tool.pixi.tasks]
 test = { cmd = "pytest", description = "Run the test suite" }
+budget = { cmd = "python scripts/check_env_budget.py --closure cal-disp", description = "Check the core install against budget.yaml (no dask/zarr/jupyter)" }
 lint = { cmd = "pre-commit run --all-files", description = "Run ruff/black/mypy via pre-commit" }
 docs = { cmd = "mkdocs serve", description = "Serve the documentation locally" }
 build-golden = { cmd = "bash scripts/build_golden_output.sh", description = "Build the golden dataset (needs ~/.netrc Earthdata login)" }
