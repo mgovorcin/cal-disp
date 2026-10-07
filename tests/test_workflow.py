@@ -326,7 +326,7 @@ def test_run_calibration_without_set_layer_warns(
     assert "calibrating without SET" in caplog.text
 
 
-def test_find_reference_point(tmp_path: Path):
+def test_find_reference_point():
     from cal_disp.workflow import _find_reference_point
 
     coherence = np.full((40, 50), 0.3, dtype=np.float32)
@@ -339,10 +339,46 @@ def test_find_reference_point(tmp_path: Path):
         coords={"y": 1000.0 - 30.0 * np.arange(40), "x": 30.0 * np.arange(50)},
     )
 
-    row, col = _find_reference_point(ds, mask, tmp_path)
+    row, col = _find_reference_point(ds, mask)
 
     assert 5 <= row < 15
     assert 30 <= col < 45
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_reference_rule_matches_opera_utils(tmp_path: Path, seed: int):
+    """The ported rule picks the same pixel as opera_utils' find_reference_point."""
+    rebase_reference = pytest.importorskip("opera_utils.disp.rebase_reference")
+    from rasterio.transform import from_origin
+
+    from cal_disp.workflow import _quality_reference_point
+
+    rng = np.random.default_rng(seed)
+    quality = rng.uniform(0.0, 1.0, (60, 80)).astype(np.float32)
+    quality[rng.uniform(size=quality.shape) < 0.3] = 0.0  # masked pixels
+    if seed == 5:
+        quality = np.minimum(quality, 0.7)  # forces the lower thresholds
+    path = tmp_path / "q.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=60,
+        width=80,
+        count=1,
+        dtype="float32",
+        transform=from_origin(0, 0, 30, 30),
+    ) as dst:
+        dst.write(quality, 1)
+    expected = tuple(int(v) for v in rebase_reference.find_reference_point(path))
+    assert _quality_reference_point(quality) == expected
+
+
+def test_reference_rule_without_candidates_raises():
+    from cal_disp.workflow import _quality_reference_point
+
+    with pytest.raises(ValueError, match="No valid candidates"):
+        _quality_reference_point(np.full((5, 5), 0.2, dtype=np.float32))
 
 
 def test_run_calibration_clips_negative_std(

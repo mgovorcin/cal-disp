@@ -272,46 +272,53 @@ def _upsample_centres(
     return rows[y0] * (1 - wy)[:, None] + rows[y1] * wy[:, None]
 
 
-def _find_reference_point(
-    ds_disp: xr.Dataset, mask: np.ndarray, work_dir: Path
+def _quality_reference_point(
+    quality: np.ndarray,
+    max_quality_test: float = 0.95,
+    min_quality: float = 0.5,
+    step: float = 0.05,
 ) -> tuple[int, int]:
+    """Pick a high-quality pixel near the centre of mass of the good data.
+
+    Port of ``opera_utils.disp.rebase_reference.find_reference_point`` (same
+    thresholds and rule), working on the array instead of a GeoTIFF so the
+    calibration core does not need ``opera-utils[disp]`` (dask, zarr, s3fs).
+    Thresholds step down from `max_quality_test`; at the first one with
+    candidates, the candidate closest to their centre of mass wins.
+
+    Raises
+    ------
+    ValueError
+        If no pixel exceeds `min_quality`.
+
+    """
+    from scipy import ndimage
+
+    for threshold in np.arange(max_quality_test, min_quality - step, -step):
+        candidates = quality > threshold
+        if not np.any(candidates):
+            continue
+        r, c = ndimage.center_of_mass(candidates)
+        rows, cols = np.where(candidates)
+        idx = np.argmin(np.sqrt((rows - r) ** 2 + (cols - c) ** 2))
+        return int(rows[idx]), int(cols[idx])
+    msg = f"No valid candidates found with quality above {min_quality}"
+    raise ValueError(msg)
+
+
+def _find_reference_point(ds_disp: xr.Dataset, mask: np.ndarray) -> tuple[int, int]:
     """Choose the reference pixel ``(row, col)`` for one product.
 
-    Venti's rule (``opera_utils`` ``find_reference_point``) applied to the
-    product's temporal coherence over valid pixels.
+    Venti's rule (`_quality_reference_point`, ported from ``opera_utils``)
+    applied to the product's temporal coherence over valid pixels.
     """
-    from opera_utils.disp import rebase_reference
-
     if "temporal_coherence" in ds_disp:
         quality = ds_disp.temporal_coherence.values.astype(np.float32)
     else:
         quality = np.ones(mask.shape, dtype=np.float32)
     quality = np.where(mask & np.isfinite(quality), quality, 0.0).astype(np.float32)
-
-    x, y = ds_disp.x.values, ds_disp.y.values
-    dx, dy = float(x[1] - x[0]), float(y[1] - y[0])
-    crs_wkt = (
-        ds_disp["spatial_ref"].attrs.get("crs_wkt")
-        if "spatial_ref" in ds_disp
-        else None
-    )
-    quality_file = work_dir / "reference_quality.tif"
-    with rasterio.open(
-        quality_file,
-        "w",
-        driver="GTiff",
-        height=quality.shape[0],
-        width=quality.shape[1],
-        count=1,
-        dtype="float32",
-        crs=crs_wkt,
-        transform=rasterio.transform.from_origin(
-            float(x[0]) - dx / 2, float(y[0]) - dy / 2, dx, -dy
-        ),
-    ) as dst:
-        dst.write(quality, 1)
     try:
-        row, col = rebase_reference.find_reference_point(quality_file)
+        row, col = _quality_reference_point(quality)
     except ValueError:
         # Nothing above the minimum quality: take the best pixel
         row, col = np.unravel_index(np.argmax(quality), quality.shape)
@@ -692,7 +699,7 @@ def run_calibration(
             )
         weights = ds_disp.temporal_coherence.values.astype(np.float32)
 
-    ref_point = _find_reference_point(ds_disp, mask, work_directory)
+    ref_point = _find_reference_point(ds_disp, mask)
     # Radar wavelength from the product so other sensors (e.g. NISAR) are
     # handled too. Venti turns it into the unwrapping cycle, lambda/2 of LOS
     # displacement (`_unwrap_cycle_length_m`, kept for the walkthrough).

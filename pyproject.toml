@@ -40,8 +40,10 @@ dependencies = [
   "click",
   "matplotlib",
   "cmap",  # browse image colormaps
-  # the `disp` extra brings what opera_utils.disp imports (reference pixel)
-  "opera-utils[disp]",
+  # Core only: frame/burst helpers. The reference pixel rule is ported into
+  # cal_disp.workflow, so the core image needs no opera_utils.disp (dask,
+  # zarr, s3fs); the `download` extra brings it for DISP staging.
+  "opera-utils",
   # The v0.5 Venti stack on the fork (Venti ADR-0021: developed against the
   # gamma golden, upstream only after the gamma tag). With gamma-equivalent
   # algorithm parameters it must reproduce the golden at 1e-6. The gamma

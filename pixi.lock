@@ -3537,8 +3537,8 @@ packages:
   timestamp: 1787678456483
 - pypi: ./
   name: cal-disp
-  version: 0.2.post1.dev79+g7085ec96e.d20261006
-  sha256: 2a2c3725d9ec4fc81d26c774c61c405953a9548cdc2d457ffa883b7a60d456e7
+  version: 0.2.post1.dev83+g079ea9ffe.d20261007
+  sha256: 7db0bc0d5bbdec9b166b3a3e4acb58f5c4f4aef119c31d93c240aaef21d4fd3c
   requires_dist:
   - numpy
   - scipy
@@ -3560,7 +3560,7 @@ packages:
   - click
   - matplotlib
   - cmap
-  - opera-utils[disp]
+  - opera-utils
   - venti @ git+https://github.com/mgovorcin/venti-dev.git@1150c52719d83c3baf649e202ae1fe528f7a5f9c
   - mkdocs ; extra == 'docs'
   - mkdocs-material ; extra == 'docs'
@@ -3576,7 +3576,7 @@ packages:
   - aiohttp ; extra == 'test'
   - fsspec ; extra == 'test'
   - s3fs ; extra == 'test'
-  - opera-utils ; extra == 'download'
+  - opera-utils[disp] ; extra == 'download'
   - asf-search ; extra == 'download'
   - rich ; extra == 'download'
   - zarr ; extra == 'download'
