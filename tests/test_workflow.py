@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import rasterio
 import xarray as xr
 
 from cal_disp.config._algorithm import AlgorithmParameters, CalibrationOptions
@@ -497,3 +498,116 @@ def test_run_calibration_tropo_toggle(
         assert corrections == []
         assert applied == "none"
         assert atmospheric == "none"
+
+
+def _write_mask_like(disp_file: Path, path: Path, values: np.ndarray, **overrides):
+    """Write a uint8 mask raster on the grid of `disp_file` (or a shifted one)."""
+    from rasterio.transform import from_origin
+
+    with xr.open_dataset(disp_file, engine="h5netcdf") as ds:
+        x, y = ds.x.values, ds.y.values
+    dx, dy = float(x[1] - x[0]), float(y[1] - y[0])
+    profile = {
+        "driver": "GTiff",
+        "height": values.shape[0],
+        "width": values.shape[1],
+        "count": 1,
+        "dtype": values.dtype,
+        "transform": from_origin(
+            float(x[0]) - dx / 2 + overrides.pop("shift_x", 0.0),
+            float(y[0]) - dy / 2,
+            dx,
+            -dy,
+        ),
+    }
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(values, 1)
+    return path
+
+
+def _calibrate(tmp_path, disp, los, unr, **kwargs):
+    lookup_file, tenv8_dir = unr
+    return run_calibration(
+        disp_file=disp,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=los,
+        algorithm_parameters=AlgorithmParameters(
+            calibration_options=CalibrationOptions(
+                apply_solid_earth_tide_correction=False
+            )
+        ),
+        **kwargs,
+    )
+
+
+def test_mask_file_pixels_are_invalid_for_the_fit(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+):
+    """The runconfig mask_file is ANDed into the valid mask Venti fits on."""
+    _calibrate(tmp_path / "a", sample_disp_product, sample_static_los, sample_unr_data)
+    (plain,) = captured_core
+    captured_core.clear()
+    values = np.ones(plain["mask"].shape, dtype=np.uint8)
+    values[50:80, 60:120] = 0
+    mask_file = _write_mask_like(sample_disp_product, tmp_path / "mask.tif", values)
+    _calibrate(
+        tmp_path / "b",
+        sample_disp_product,
+        sample_static_los,
+        sample_unr_data,
+        mask_file=mask_file,
+    )
+    (masked,) = captured_core
+    assert not masked["mask"][50:80, 60:120].any()
+    outside = np.ones(values.shape, bool)
+    outside[50:80, 60:120] = False
+    np.testing.assert_array_equal(masked["mask"][outside], plain["mask"][outside])
+
+
+@pytest.mark.usefixtures("captured_core")  # Venti stubbed: the error comes first
+@pytest.mark.parametrize(
+    ("problem", "match"),
+    [
+        ("dtype", "dtype must be uint8"),
+        ("shape", "does not match the DISP grid"),
+        ("grid", "is not the DISP grid"),
+        ("values", "values must be 0 or 1"),
+    ],
+)
+def test_mask_file_must_be_a_0_1_uint8_raster_on_the_disp_grid(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    problem: str,
+    match: str,
+):
+    with xr.open_dataset(sample_disp_product, engine="h5netcdf") as ds:
+        shape = (ds.sizes["y"], ds.sizes["x"])
+    values = np.ones(shape, dtype=np.uint8)
+    extra = {}
+    if problem == "dtype":
+        values = values.astype(np.float32)
+    elif problem == "shape":
+        values = values[:-3]
+    elif problem == "grid":
+        extra["shift_x"] = 500.0
+    elif problem == "values":
+        values[0, 0] = 255
+    mask_file = _write_mask_like(
+        sample_disp_product, tmp_path / "m.tif", values, **extra
+    )
+    with pytest.raises(ValueError, match=match):
+        _calibrate(
+            tmp_path,
+            sample_disp_product,
+            sample_static_los,
+            sample_unr_data,
+            mask_file=mask_file,
+        )
