@@ -47,3 +47,10 @@ Runtimes on aurora vary with the machine's load (48 s idle, up to 83 s at a
 load average of 35). What is left at the peak is the working set itself:
 displacement, valid mask, GNSS field and σ, coherence, the working field,
 the surface and σ_CAL (about 0.3 GB each).
+
+**Small-instance estimate (T47.4).** On aurora, pinned to two cores
+(`taskset -c 0,1`) with `worker_settings: {n_workers: 1, threads_per_worker:
+2}`, the v0.5 golden pair takes 1 min 43 s at 4.02 GB peak: a t3.large
+(2 vCPU, 8 GB) fits with room, a t3.medium (4 GB) does not. One pair per
+instance-run is far inside the 72 h latency requirement; a 208-epoch frame
+is about 6 h of t3.large time. Not yet measured on EC2 itself.
