@@ -40,6 +40,7 @@ dependencies = [
   "click",
   "matplotlib",
   "cmap",  # browse image colormaps
+  "threadpoolctl",  # worker_settings cap the BLAS/OpenMP threads
   # Core only: frame/burst helpers. The reference pixel rule is ported into
   # cal_disp.workflow, so the core image needs no opera_utils.disp (dask,
   # zarr, s3fs); the `download` extra brings it for DISP staging.
@@ -200,6 +201,7 @@ tqdm = "*"
 click = "*"
 matplotlib-base = "*"
 cmap = "*"
+threadpoolctl = "*"
 pip = "*"
 
 [tool.pixi.pypi-dependencies]

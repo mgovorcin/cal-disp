@@ -3537,8 +3537,8 @@ packages:
   timestamp: 1787678456483
 - pypi: ./
   name: cal-disp
-  version: 0.2.post1.dev92+g85541a739.d20261009
-  sha256: 2ce2e4537725f5eac95acc4f95209371788218a4a111fcd313e0567acb022ca8
+  version: 0.2.post1.dev93+gac027a573.d20261009
+  sha256: 5d4d867f211a908b4fbdee88ea8b554a8e61d4fb9029f6f77e946e50cbc8c8e7
   requires_dist:
   - numpy
   - scipy
@@ -3560,6 +3560,7 @@ packages:
   - click
   - matplotlib
   - cmap
+  - threadpoolctl
   - opera-utils
   - venti @ git+https://github.com/mgovorcin/venti-dev.git@07d149e8d709bb9d394c0fd58642bdb5f344ad62
   - mkdocs ; extra == 'docs'
