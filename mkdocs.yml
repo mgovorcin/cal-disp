@@ -25,6 +25,7 @@ theme:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Performance: performance.md
   - Workflow walkthrough: notebooks/00_calibration_walkthrough.ipynb
   - Tutorials:
       - Download: tutorials/download.ipynb
