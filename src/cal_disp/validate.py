@@ -379,7 +379,64 @@ def _compare_variable(
     if not compare_values:
         logger.debug("Skipping volatile value of %s", label)
         return
+    if (group, name) in SEMANTIC_VALUES:
+        SEMANTIC_VALUES[(group, name)](ref.values, test.values, group, name, report)
+        return
     _compare_values(ref.values, test.values, group, name, rtol, atol, report)
+
+
+def _compare_algorithm_parameters(
+    ref_data: np.ndarray,
+    test_data: np.ndarray,
+    group: str,
+    name: str,
+    report: ValidationReport,
+) -> None:
+    """Compare the embedded algorithm parameters as configurations, not text.
+
+    Both YAML strings are parsed with the current `AlgorithmParameters`, so
+    an option group added after the reference was written compares equal
+    when the test product carries it at its default (additive parameters,
+    the frozen-interface rule). Any value that differs still fails.
+    """
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    from cal_disp.config._algorithm import AlgorithmParameters
+
+    def _parse(data: np.ndarray) -> dict[str, Any]:
+        text = str(_as_str_array(np.asarray(data)).reshape(-1)[0])
+        raw = YAML(typ="safe").load(StringIO(text)) or {}
+        return AlgorithmParameters.model_validate(raw).model_dump(mode="json")
+
+    try:
+        ref_cfg, test_cfg = _parse(ref_data), _parse(test_data)
+    except Exception as exc:  # noqa: BLE001 - unparsable is a difference
+        report.fail(group, f"{name}: cannot parse ({exc})")
+        return
+    if ref_cfg != test_cfg:
+        diffs = sorted(_dict_diff(ref_cfg, test_cfg))
+        report.fail(group, f"{name}: parameters differ at {diffs[:8]}")
+
+
+def _dict_diff(a: dict[str, Any], b: dict[str, Any], prefix: str = "") -> set[str]:
+    """Dotted keys whose values differ between two nested dicts."""
+    out: set[str] = set()
+    for key in set(a) | set(b):
+        path = f"{prefix}{key}"
+        va, vb = a.get(key), b.get(key)
+        if isinstance(va, dict) and isinstance(vb, dict):
+            out |= _dict_diff(va, vb, path + ".")
+        elif va != vb:
+            out.add(path)
+    return out
+
+
+#: Scalar variables compared by meaning rather than by text.
+SEMANTIC_VALUES = {
+    ("metadata", "algorithm_parameters_yaml"): _compare_algorithm_parameters,
+}
 
 
 def _disk_dtype(da: xr.DataArray) -> str:
