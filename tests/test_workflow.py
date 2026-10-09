@@ -808,3 +808,78 @@ def test_algorithm_options_reach_venti():
     default = AlgorithmParameters.create_default().calibration_options.to_venti()
     assert default.surface.method == "windowed_plane"  # gamma reproduced by default
     assert default.tropo.mode == "legacy"
+
+
+@pytest.mark.parametrize(
+    ("method", "enabled", "expect_hook"),
+    [("loclin", True, True), ("loclin", False, False), ("windowed_plane", True, False)],
+)
+def test_unwrap_hook_only_on_the_loclin_route(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    method: str,
+    enabled: bool,
+    expect_hook: bool,
+):
+    """Regression: with loclin, unwrap_error_correction=True used to do nothing
+    because no hook reached calibrate_pair (the gamma route has its own)."""
+    lookup_file, tenv8_dir = sample_unr_data
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": False,
+                "unwrap_error_correction": enabled,
+                "downsample_factor": 2,
+                "surface": {"method": method, "cutoff_wavelength_meters": 5000.0},
+            }
+        }
+    )
+    run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=params,
+    )
+    (call,) = captured_core
+    assert callable(call["unwrap_hook"]) is expect_hook
+
+
+def test_loclin_unwrap_end_to_end_writes_decisions(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+):
+    """loclin + unwrap through the real Venti: the hook runs and its per-region
+    decisions are written next to the product."""
+    lookup_file, tenv8_dir = sample_unr_data
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": False,
+                "unwrap_error_correction": True,
+                "downsample_factor": 2,
+                "surface": {
+                    "method": "loclin",
+                    "cutoff_wavelength_meters": 5000.0,
+                    "two_pass": True,
+                },
+            }
+        }
+    )
+    out = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=params,
+    )
+    assert (tmp_path / "out" / "unwrap_decisions.csv").exists()
+    with xr.open_dataset(out) as ds:
+        assert np.isfinite(ds["calibration"].values).mean() > 0.9
