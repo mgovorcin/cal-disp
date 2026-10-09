@@ -4,7 +4,8 @@ Full-frame runtime and peak memory of `cal-disp run` on the F08882 golden pair
 (7733 × 9464 pixels, factor-6 fit grid), on aurora (32 cores,
 `NUMPY_MADVISE_HUGEPAGE=0`). Peak memory is the `Maximum memory usage` line
 the run logs; `scripts/check_env_budget.py --peak-memory-log` checks it against
-`peak_memory_gb` in `budget.yaml` (7 GB; the plan's target is 4 GB, Venti T47).
+`peak_memory_gb` in `budget.yaml` (4.5 GB since 2026-10-09; the plan's target is
+4 GB, Venti T47).
 
 | Configuration | Venti | fit | whole run | peak |
 |---|---|---|---|---|
@@ -14,6 +15,8 @@ the run logs; `scripts/check_env_budget.py --peak-memory-log` checks it against
 | gamma 0.3 golden through `calibrate_pair` | `2b2678b` | | | 6.02 GB |
 | v0.5: loclin 50 km, two passes, coh⁸ + robust, σ_CAL (first wiring) | `f7da024` | 42 s | 96 s | 8.81 GB |
 | v0.5, same | `2b2678b` | 22 s | 55 s | 7.27 GB |
+| gamma 0.3 golden, T47 (cal-disp memory changes + Venti) | `07d149e` | | | 3.6–4.0 GB |
+| v0.5, T47 | `07d149e` | | 48–83 s | 4.0–4.1 GB |
 
 What moved the numbers (Venti commits on the `mgovorcin/venti-dev` stack):
 
@@ -25,7 +28,22 @@ What moved the numbers (Venti commits on the `mgovorcin/venti-dev` stack):
   σ_CAL) kept in the displacement's float32 instead of float64 (−1.5 GB,
   and half the runtime).
 
-The v0.5 configuration is 0.27 GB above the 7 GB budget, which is defined on
-the gamma golden run. The remaining full-frame float32 copies (displacement,
-mask, GNSS field and its sigma, the components) are the target of Venti T47
-(memory and runtime toward a small EC2 instance).
+- T47 (2026-10-09), profiled with memray on the golden pair; every change
+  leaves the product bit-identical (`cal-disp validate --rtol 0 --atol 0`):
+  - cal-disp: the LOS bands are freed once the GNSS field is projected
+    (−0.9 GB); masks and coherence are read in row blocks like the
+    displacement, so xarray keeps no decoded copy in the dataset (−0.6 GB);
+    the reference pixel uses the coherence already loaded; the SET layer is
+    not copied a second time (−0.3 GB);
+  - Venti `4ac24f7`: `calibrate_pair(diagnostic_maps=False)` skips the
+    full-resolution coverage / σ_fit / n_eff maps the product never writes,
+    and `cal_reference_offset` (one constant) is a read-only view (−0.9 GB);
+  - Venti `07d149e`: the medians the run logs were taken on full-frame maps,
+    and `np.nanmedian` copies its input (−0.3 GB at the peak); the zero
+    component is a view.
+
+v0.5 went from 7.27 to about 4.1 GB and gamma from 6.0 to about 3.8 GB.
+Runtimes on aurora vary with the machine's load (48 s idle, up to 83 s at a
+load average of 35). What is left at the peak is the working set itself:
+displacement, valid mask, GNSS field and σ, coherence, the working field,
+the surface and σ_CAL (about 0.3 GB each).

@@ -17,4 +17,4 @@ known_exceptions:
     browse PNG (cal_disp.browse_image). Replacing it with PIL + cmap changes a
     delivered product file, so it is a decision for the v0.5 image (plan T49).
 # Peak memory of the golden run, GB (plan T26.5): `pixi run validate` must stay below.
-peak_memory_gb: 7.0
+peak_memory_gb: 4.5
