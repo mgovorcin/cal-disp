@@ -109,25 +109,46 @@ def test_run_calibration_requires_staged_grid_type(
 
 @pytest.fixture
 def captured_core(monkeypatch):
-    """Replace Venti's core with a recorder returning a zero surface."""
-    from venti import surface
+    """Replace Venti's calibrate_pair with a recorder returning a zero surface."""
+    from venti.calibration import two_pass
 
     calls: list[dict] = []
 
-    def _fake(disp, gnss_los, mask, ref_point, window_size, **kwargs):
+    def _fake(disp, gnss_los, mask, ref_point, options, pixel_m, cycle_m, **kwargs):
         calls.append(
             {
                 "disp": disp,
                 "gnss_los": gnss_los,
                 "mask": mask,
                 "ref_point": ref_point,
-                "window_size": window_size,
+                "options": options,
+                "pixel_m": pixel_m,
+                "cycle_m": cycle_m,
                 **kwargs,
             }
         )
-        return surface.CalibrationSurface(np.zeros_like(disp))
+        zeros = np.zeros_like(disp)
+        tropo = kwargs.get("tropo")
+        set_corr = kwargs.get("set_correction")
+        return two_pass.CalibrationResult(
+            cal_gnss_surface=zeros,
+            cal_reference_offset=zeros,
+            cal_tropo=zeros if tropo is None else np.asarray(tropo, disp.dtype),
+            cal_set=zeros if set_corr is None else np.asarray(set_corr, disp.dtype),
+            cal_unwrap_shift=zeros,
+            components_applied={
+                "cal_gnss_surface": True,
+                "cal_reference_offset": True,
+                "cal_tropo": tropo is not None,
+                "cal_set": set_corr is not None,
+                "cal_unwrap_shift": False,
+            },
+            method=options.surface.method,
+            reference_point=tuple(ref_point),
+            reference_value=0.0,
+        )
 
-    monkeypatch.setattr(surface, "estimate_calibration_surface", _fake)
+    monkeypatch.setattr(two_pass, "calibrate_pair", _fake)
     return calls
 
 
@@ -165,25 +186,29 @@ def test_run_calibration_venti_core_inputs(
     with xr.open_dataset(sample_disp_product_with_corrections) as disp:
         coherence = disp["temporal_coherence"].values
 
-    # SET is handed to Venti as a correction (removed before the fit)
+    # SET is handed to Venti as a component (removed before the fit, restored)
     if apply_set:
-        (correction,) = call["corrections"]
-        np.testing.assert_allclose(correction, set_layer, rtol=1e-6)
+        np.testing.assert_allclose(call["set_correction"], set_layer, rtol=1e-6)
     else:
-        assert list(call["corrections"]) == []
+        assert call["set_correction"] is None
+    assert call["tropo"] is None
     # Displacement in m, GNSS converted from mm to m, valid reference pixel
     assert call["disp"].dtype == np.float32
     assert np.nanmax(np.abs(call["gnss_los"])) < 0.01
     assert call["mask"][call["ref_point"]]
-    assert call["window_size"] == options.window_size_pixels
+    assert round(call["options"].window_size_meters / call["pixel_m"]) == (
+        options.window_size_pixels
+    )
     assert call["options"].model_dump(
         include={"apply_solid_earth_tide_correction", "event_mask_buffer_pixels"}
     ) == {
         "apply_solid_earth_tide_correction": apply_set,
         "event_mask_buffer_pixels": 2,
     }
-    assert call["downsample_factor"] == 2
-    np.testing.assert_allclose(call["downsample_weights"], coherence, rtol=1e-6)
+    assert call["options"].downsample_factor == 2
+    assert call["options"].downsample_weighted
+    np.testing.assert_allclose(call["coherence"], coherence, rtol=1e-6)
+    assert call["options"].surface.method == "windowed_plane"  # gamma default
 
     with xr.open_dataset(out_path) as ds:
         applied = ds["calibration"].attrs["corrections_applied"]
@@ -198,7 +223,7 @@ def test_unwrap_error_correction_is_off_by_default():
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_run_calibration_passes_the_full_wavelength_to_venti(
+def test_run_calibration_passes_half_the_wavelength_as_the_cycle(
     tmp_path: Path,
     sample_disp_product: Path,
     sample_static_los: Path,
@@ -206,9 +231,8 @@ def test_run_calibration_passes_the_full_wavelength_to_venti(
     captured_core,
     enabled: bool,
 ):
-    """Venti (>= the T16.3 fix) turns `wavelength_m` into the unwrapping cycle
-    λ/2 itself, so cal-disp passes the radar wavelength unchanged; halving it
-    here too would round region offsets to λ/4."""
+    """calibrate_pair takes the unwrapping cycle itself: lambda/2 of LOS
+    displacement (two-way path), from the product's radar wavelength."""
     lookup_file, tenv8_dir = sample_unr_data
     run_calibration(
         disp_file=sample_disp_product,
@@ -226,18 +250,9 @@ def test_run_calibration_passes_the_full_wavelength_to_venti(
 
     (call,) = captured_core
     assert call["options"].unwrap_error_correction is enabled
-    # The fixture product's /identification/radar_wavelength is 0.05546 m
-    assert call["wavelength_m"] == pytest.approx(0.05546, rel=1e-6)
-
-
-def test_venti_rounds_to_half_the_wavelength_it_is_given():
-    """The other half of the contract: Venti's surface halves `wavelength_m`."""
-    import inspect
-
-    from venti import surface
-
-    src = inspect.getsource(surface.estimate_calibration_surface)
-    assert "cycle_length=wavelength_m / 2" in src
+    # The fixture product's /identification/radar_wavelength is 0.05546 m; one
+    # unwrapping cycle of LOS displacement is lambda/2
+    assert call["cycle_m"] == pytest.approx(0.05546 / 2, rel=1e-6)
 
 
 def _displacement_with_nodata(tmp_path: Path) -> tuple[Path, np.ndarray]:
@@ -322,7 +337,7 @@ def test_run_calibration_without_set_layer_warns(
         los_file=sample_static_los,
     )
 
-    assert list(captured_core[0]["corrections"]) == []
+    assert captured_core[0]["set_correction"] is None
     assert "calibrating without SET" in caplog.text
 
 
@@ -518,20 +533,19 @@ def test_run_calibration_tropo_toggle(
         ),
     )
 
-    corrections = list(captured_core[0]["corrections"])
+    tropo_component = captured_core[0]["tropo"]
     with xr.open_dataset(out_path) as ds:
         applied = ds["calibration"].attrs["corrections_applied"]
     with xr.open_dataset(out_path, group="metadata") as meta:
         atmospheric = str(meta["ceos_atmospheric_phase_correction"].values)
     if apply_tropo:
         assert len(prepared) == 1
-        (correction,) = corrections
-        np.testing.assert_allclose(correction, 0.01)
+        np.testing.assert_allclose(tropo_component, 0.01)
         assert applied == "troposphere"
         assert atmospheric == "tropospheric"
     else:
         assert prepared == []
-        assert corrections == []
+        assert tropo_component is None
         assert applied == "none"
         assert atmospheric == "none"
 
@@ -647,3 +661,150 @@ def test_mask_file_must_be_a_0_1_uint8_raster_on_the_disp_grid(
             sample_unr_data,
             mask_file=mask_file,
         )
+
+
+# --- Venti calibrate_pair wiring (Venti plan T37) ----------------------------
+
+
+def _fake_tropo(monkeypatch, tmp_path, los_file, sec_field):
+    """prepare_troposphere_correction writing ref = 0 and sec = `sec_field`."""
+    from cal_disp.prep import tropo
+
+    prepared = []
+
+    def _fake_prepare(**_kwargs):
+        with rasterio.open(los_file) as src:
+            profile = src.profile | {"count": 1, "dtype": "float32"}
+        paths = []
+        for name, field in (("ref", np.zeros((200, 200))), ("sec", sec_field)):
+            path = tmp_path / f"{name}_tropo.tif"
+            with rasterio.open(path, "w", **profile) as dst:
+                dst.write(field[np.newaxis].astype(np.float32))
+            paths.append(path)
+        prepared.append(paths)
+        return tuple(paths)
+
+    monkeypatch.setattr(tropo, "prepare_troposphere_correction", _fake_prepare)
+    return prepared
+
+
+@pytest.mark.parametrize("mode", ["off", "full", "stratified"])
+def test_tropo_modes_reach_calibrate_pair(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_static_dem: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    monkeypatch,
+    mode: str,
+):
+    """tropo.mode: off ignores the files; full passes sec - ref; stratified
+    passes Venti's height-dependent part of it (Venti plan T34 through T37)."""
+    from venti.calibration.tropo import apply_tropo
+
+    with rasterio.open(sample_static_dem) as src:
+        dem = src.read(1).astype(np.float64)
+    yy, xx = np.mgrid[0:200, 0:200]
+    # 4 mm/km stratification plus a lateral pattern the model cannot explain
+    sec = -0.004 * dem / 1000.0 + 0.003 * np.sin(xx / 7.0) * np.cos(yy / 9.0)
+    prepared = _fake_tropo(monkeypatch, tmp_path, sample_static_los, sec)
+    lookup_file, tenv8_dir = sample_unr_data
+    out_path = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        dem_file=sample_static_dem,
+        reference_tropo_files=[tmp_path / "ref.nc"],
+        secondary_tropo_files=[tmp_path / "sec.nc"],
+        algorithm_parameters=AlgorithmParameters.create_default().with_overrides(
+            {"calibration_options": {"tropo": {"mode": mode}}}
+        ),
+    )
+    (call,) = captured_core
+    with xr.open_dataset(out_path) as ds:
+        applied = ds["calibration"].attrs["corrections_applied"]
+    if mode == "off":
+        assert prepared == []
+        assert call["tropo"] is None
+        assert "troposphere" not in applied
+        return
+    assert len(prepared) == 1
+    assert "troposphere" in applied
+    full = sec.astype(np.float32)
+    if mode == "full":
+        np.testing.assert_allclose(call["tropo"], full, atol=1e-7)
+    else:
+        expected = apply_tropo(
+            full,
+            "stratified",
+            dem=dem,
+            valid=call["mask"],
+            x=np.asarray(xr.open_dataset(sample_disp_product).x),
+            y=np.asarray(xr.open_dataset(sample_disp_product).y),
+        )
+        np.testing.assert_allclose(call["tropo"], expected, atol=1e-6)
+        # the lateral pattern is not passed on
+        assert np.nanstd(call["tropo"] - (-0.004 * dem / 1000.0)) < 0.0005
+
+
+def test_loclin_end_to_end_writes_sigma_cal(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+):
+    """surface.method = loclin through the real Venti: the product carries the
+    loclin calibration and sigma_CAL as calibration_std."""
+    lookup_file, tenv8_dir = sample_unr_data
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": False,
+                "downsample_factor": 2,
+                "surface": {"method": "loclin", "cutoff_wavelength_meters": 5000.0},
+                "uncertainty": {"k_grid": 3.9},
+            }
+        }
+    )
+    out = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=params,
+    )
+    with xr.open_dataset(out) as ds:
+        cal = ds["calibration"].values
+        std = ds["calibration_std"].values
+        source = ds["calibration_std"].attrs["uncertainty_source"]
+    assert np.isfinite(cal).mean() > 0.9
+    assert "sigma_CAL" in source and "k = 3.9" in source
+    assert np.nanmin(std) > 0
+
+
+def test_algorithm_options_reach_venti():
+    """The schema-v2 groups of algorithm_parameters arrive in Venti unchanged."""
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "downsample_factor": 3,
+                "surface": {"method": "loclin", "two_pass": True},
+                "weights": {"coherence_power": 8.0, "robust": True},
+                "tropo": {"mode": "auto"},
+                "uncertainty": {"k_grid": 3.9},
+            }
+        }
+    )
+    venti = params.calibration_options.to_venti()
+    assert venti.downsample_factor == 3
+    assert (venti.surface.method, venti.surface.two_pass) == ("loclin", True)
+    assert (venti.weights.coherence_power, venti.weights.robust) == (8.0, True)
+    assert venti.tropo.mode == "auto"
+    assert venti.uncertainty.k_grid == 3.9
+    default = AlgorithmParameters.create_default().calibration_options.to_venti()
+    assert default.surface.method == "windowed_plane"  # gamma reproduced by default
+    assert default.tropo.mode == "legacy"
