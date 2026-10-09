@@ -34,6 +34,11 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
   references the first island; see `docs/notebooks/01_unwrap_cycle_length.ipynb`.
   Needs a phase-discontinuity segmentation in Venti and validation on products
   with known unwrapping errors before it is enabled (*changes the golden*).
+  **2026-10-09, owner decision: keep it off.** The v0.5 (loclin) route now
+  runs it when the flag is set (PR #7), but TS-U1 phase 1 recommended no-go
+  (`disp2vlm_validation/studies/TS-U1/REPORT.md`). Come back to it through a
+  trade study on a larger truth set (Venti plan T62) and confirm it there
+  before any release enables it.
 - [ ] **Fitted surface near masked areas** (Venti, *changes the golden*):
   unfitted blocks are 0 rather than NaN before upsampling, which pulls the
   plane toward 0 within a few pixels of masked blocks; `_find_data_extent` is
