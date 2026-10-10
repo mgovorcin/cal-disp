@@ -941,3 +941,53 @@ def test_calibration_std_states_what_sigma_cal_covers(
         assert "sigma_nonsecular = 3 mm" in source
     else:
         assert "non-secular station motion" in source
+
+
+@pytest.mark.parametrize(
+    ("method", "expect_enu"), [("loclin", True), ("windowed_plane", False)]
+)
+def test_gnss_buffer_reaches_the_sampler_on_the_loclin_route(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    monkeypatch,
+    method: str,
+    expect_enu: bool,
+):
+    """v0.5 samples the grid with sample_gnss_enu and the gnss.buffer_meters
+    option (R-G2); the gamma route keeps its path (golden unchanged)."""
+    import venti.gnss.sampling as sampling
+
+    seen = []
+    real = sampling.sample_gnss_enu
+
+    def spy(cfg, grid, exclude=None, defo_db_version=None):
+        seen.append(cfg)
+        return real(cfg, grid, exclude, defo_db_version)
+
+    monkeypatch.setattr(sampling, "sample_gnss_enu", spy)
+    lookup_file, tenv8_dir = sample_unr_data
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": False,
+                "downsample_factor": 2,
+                "surface": {"method": method, "cutoff_wavelength_meters": 5000.0},
+                "gnss": {"buffer_meters": 20000.0},
+            }
+        }
+    )
+    out = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=params,
+    )
+    assert bool(seen) is expect_enu
+    if expect_enu:
+        assert seen[0].buffer_meters == 20000.0
+        with xr.open_dataset(out) as ds:
+            assert np.isfinite(ds["calibration"].values).mean() > 0.9
