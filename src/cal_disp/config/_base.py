@@ -131,8 +131,10 @@ class DynamicAncillaryFileGroup(YamlModel):
         Alias: static_dem_file
     mask_file : Path or None, optional
         Optional byte mask file to ignore low correlation/bad data (e.g., water mask).
-        Convention: 0 = invalid/no data, 1 = good data. Dtype must be uint8.
-        Default is None.
+        Convention: 0 = invalid/no data, 1 = good data. Dtype must be uint8 and
+        the raster must be on the DISP grid (same shape, pixel size and origin).
+        Combined with the product's recommended_mask and water_mask. Default
+        is None.
     reference_tropo_files : list[Path] or None, optional
         Paths to TROPO files for the reference (primary) date.
         If not provided, tropospheric correction for reference is skipped.
@@ -148,11 +150,6 @@ class DynamicAncillaryFileGroup(YamlModel):
         Paths to calibration tile bounds files (e.g., S1 burst bounds) covering
         the full frame. Not supported in this release: a non-empty list raises.
         Default is None.
-
-    Notes
-    -----
-    ``mask_file`` is accepted but not applied in this release; the workflow
-    logs a warning when it is set.
 
     """
 

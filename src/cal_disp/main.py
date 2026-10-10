@@ -91,13 +91,6 @@ def run(
 
     # Extract optional tropo file lists from dynamic ancillaries
     dyn = runconfig.dynamic_ancillary_options
-    if dyn.mask_file is not None:
-        logger.warning(
-            "mask_file (%s) is not applied in this release: only the masks of the"
-            " DISP product (recommended_mask, water_mask) and the event databases"
-            " are used",
-            dyn.mask_file,
-        )
     ref_tropo = (
         [Path(f) for f in dyn.reference_tropo_files]
         if dyn.reference_tropo_files
@@ -137,6 +130,7 @@ def run(
         secondary_tropo_files=sec_tropo,
         defo_area_db_json=defo_area_db,
         event_db_json=event_db,
+        mask_file=Path(dyn.mask_file) if dyn.mask_file is not None else None,
         block_shape=runconfig.worker_settings.block_shape,
         n_workers=runconfig.worker_settings.n_workers,
         threads_per_worker=runconfig.worker_settings.threads_per_worker,

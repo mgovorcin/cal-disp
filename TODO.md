@@ -52,8 +52,8 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
   guard (*changes the golden*).
 - [ ] **Auxiliary 3-D model** is an all-zero placeholder; write it only once the
   decomposition exists, or mark it as a placeholder in the product.
-- [ ] **`mask_file`** is accepted but not applied (a warning is logged);
-  `run_calibration` takes no external mask yet.
+- [x] **`mask_file`**: applied since 2026-10-06 (uint8, 0/1, on the DISP
+  grid; combined with recommended_mask and water_mask; bad inputs raise).
 - [ ] **NISAR**: `StaticLayer` filename pattern is Sentinel-1 only.
 
 ## Performance

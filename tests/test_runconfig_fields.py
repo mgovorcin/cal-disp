@@ -244,19 +244,18 @@ class TestUnsupportedFields:
 
 
 class TestIgnoredFieldWarnings:
-    def test_mask_file_warns(self, tmp_path, groups, sample_mask_file, caplog):
+    def test_mask_file_is_passed_to_the_workflow(
+        self, tmp_path, groups, sample_mask_file, caplog
+    ):
         workflow = _workflow(tmp_path, groups, mask_file=sample_mask_file)
         with caplog.at_level(logging.WARNING, logger="cal_disp"):
-            _run_main(workflow, tmp_path)
+            kwargs = _run_main(workflow, tmp_path)
 
-        assert "mask_file" in caplog.text
-        assert "is not applied in this release" in caplog.text
+        assert kwargs["mask_file"] == sample_mask_file
+        assert "mask_file" not in caplog.text  # applied, no longer a warning
 
-    def test_no_mask_file_no_warning(self, tmp_path, groups, caplog):
-        with caplog.at_level(logging.WARNING, logger="cal_disp"):
-            _run_main(_workflow(tmp_path, groups), tmp_path)
-
-        assert "mask_file" not in caplog.text
+    def test_no_mask_file_passes_none(self, tmp_path, groups):
+        assert _run_main(_workflow(tmp_path, groups), tmp_path)["mask_file"] is None
 
     def _runconfig(self, groups, **kwargs) -> RunConfig:
         return RunConfig(

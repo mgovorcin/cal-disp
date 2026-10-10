@@ -121,6 +121,53 @@ def _load_displacement(ds_disp: xr.Dataset, block_rows: int = 512) -> np.ndarray
     return out
 
 
+def _read_external_mask(mask_file: Path, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Read the runconfig ``mask_file``: True where the pixel may be used.
+
+    The file must be a single-band uint8 raster on the DISP grid (same shape,
+    pixel size and origin; 0 = invalid / no data, 1 = good). Anything else is
+    an input error rather than a silent resampling, so the PGE notices a mask
+    produced for another grid.
+    """
+    with rasterio.open(mask_file) as src:
+        if src.count != 1:
+            raise ValueError(
+                f"mask_file {mask_file.name}: expected 1 band, got {src.count}"
+            )
+        if src.dtypes[0] != "uint8":
+            raise ValueError(
+                f"mask_file {mask_file.name}: dtype must be uint8, got {src.dtypes[0]}"
+            )
+        if src.shape != (len(y), len(x)):
+            raise ValueError(
+                f"mask_file {mask_file.name}: shape {src.shape} does not match the"
+                f" DISP grid {(len(y), len(x))}"
+            )
+        dx, dy = float(x[1] - x[0]), float(y[1] - y[0])
+        t = src.transform
+        # pixel-corner origin of the DISP grid (x/y are pixel centres)
+        x0, y0 = float(x[0]) - dx / 2, float(y[0]) - dy / 2
+        tol = 0.01 * abs(dx)
+        if (
+            abs(t.a - dx) > tol
+            or abs(t.e - dy) > tol
+            or abs(t.c - x0) > tol
+            or abs(t.f - y0) > tol
+        ):
+            raise ValueError(
+                f"mask_file {mask_file.name}: geotransform {tuple(t)[:6]} is not"
+                f" the DISP grid (origin {x0}, {y0}; spacing {dx}, {dy})"
+            )
+        data = src.read(1)
+    bad = ~np.isin(data, (0, 1))
+    if bad.any():
+        raise ValueError(
+            f"mask_file {mask_file.name}: values must be 0 or 1, found"
+            f" {np.unique(data[bad])[:5].tolist()}"
+        )
+    return data == 1
+
+
 def _date_to_decimal_year(dt: datetime) -> float:
     """Convert a datetime to a decimal year (e.g. 2022.55)."""
     year = dt.year
@@ -361,6 +408,7 @@ def run_calibration(
     secondary_tropo_files: list[Path] | None = None,
     defo_area_db_json: Path | None = None,
     event_db_json: Path | None = None,
+    mask_file: Path | None = None,
     block_shape: tuple[int, int] = (512, 512),  # noqa: ARG001 — TODO: Dask blocking
     n_workers: int = 4,  # noqa: ARG001 — TODO: Dask parallelisation
     threads_per_worker: int = 1,
@@ -407,6 +455,9 @@ def run_calibration(
         GeoJSON of deformation areas to exclude from the fit.
     event_db_json : Path, optional
         GeoJSON of events to exclude from the fit (within the epoch only).
+    mask_file : Path, optional
+        Runconfig byte mask (uint8, 0 = invalid, 1 = good) on the DISP grid;
+        its 0 pixels are excluded from the fit like the product's own masks.
     block_shape : tuple[int, int]
         Unused (reserved for Dask).
     n_workers : int
@@ -564,6 +615,14 @@ def run_calibration(
         mask &= ds_disp.recommended_mask.values.astype(bool)
     if "water_mask" in ds_disp:
         mask &= ds_disp.water_mask.values.astype(bool)
+    if mask_file is not None:
+        external = _read_external_mask(Path(mask_file), x, y)
+        logger.info(
+            "mask_file %s: %d pixels marked invalid",
+            Path(mask_file).name,
+            int((~external).sum()),
+        )
+        mask &= external
 
     # Event areas (True = valid) are filled from neighbours before the fit
     event_mask = None
