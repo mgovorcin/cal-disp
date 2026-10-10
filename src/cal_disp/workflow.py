@@ -274,6 +274,70 @@ def _gnss_los_fields(
     return gnss_los, gnss_los_std
 
 
+def _gnss_los_fields_enu(
+    gnss_options: Any,
+    grid_lookup: Path,
+    station_dir: Path,
+    utm_epsg: int,
+    reference_frame: str,
+    grid_version: str,
+    los: tuple[np.ndarray, np.ndarray, np.ndarray],
+    x: np.ndarray,
+    y: np.ndarray,
+    factor: int,
+    dt_years: float,
+    defo_area_db_json: Path | None = None,
+) -> tuple[np.ndarray, np.ndarray, Any]:
+    """GNSS LOS displacement and sigma (m) through Venti's single sampling path.
+
+    `venti.gnss.sampling.sample_gnss_enu` on the fit-grid block centres: grid
+    nodes within ``gnss.buffer_meters`` outside the frame constrain the
+    edges (R-G2), E/N/U are interpolated first and projected per pixel, so
+    nodes outside the swath need no LOS look, and nodes inside the curated
+    defo areas can be dropped or re-interpolated (R-G5). Returns the two
+    fields and the provenance record.
+    """
+    from venti.gnss.sampling import (
+        GnssGridConfig,
+        project_field_to_los,
+        sample_gnss_enu,
+    )
+
+    c = factor // 2
+    los_east, los_north, los_up = los
+    gx, gy = x, y
+    if factor > 1:
+        gx, gy = x[c::factor], y[c::factor]
+        los_east, los_north, los_up = (a[c::factor, c::factor] for a in los)
+    cfg = GnssGridConfig(
+        grid_lookup=grid_lookup,
+        station_dir=station_dir,
+        utm_epsg=utm_epsg,
+        reference_frame=reference_frame,
+        grid_type="constant",
+        version=grid_version,
+        buffer_meters=gnss_options.buffer_meters,
+        exclude_defo_nodes=gnss_options.exclude_defo_nodes,
+        reinterpolate_excluded=gnss_options.reinterpolate_excluded,
+        snapshot_id=gnss_options.snapshot_id,
+    )
+    exclude = db_version = None
+    if gnss_options.exclude_defo_nodes and defo_area_db_json is not None:
+        from venti.calibration.remove_restore import load_area_db
+
+        db = load_area_db(defo_area_db_json)
+        exclude, db_version = db.shapes(), db.version
+    field = sample_gnss_enu(cfg, (gx, gy), exclude, db_version)
+    los_mm, sigma_mm = project_field_to_los(
+        field, los_east, los_north, los_up, dt_years=dt_years
+    )
+    fields = [los_mm, sigma_mm]
+    if factor > 1:
+        fields = [_upsample_centres(f, gx, gy, x, y) for f in fields]
+    gnss_los, gnss_los_std = (np.asarray(f, dtype=np.float32) / 1000.0 for f in fields)
+    return gnss_los, gnss_los_std, field.provenance
+
+
 def _upsample_centres(
     field: np.ndarray, xc: np.ndarray, yc: np.ndarray, x: np.ndarray, y: np.ndarray
 ) -> np.ndarray:
@@ -681,17 +745,46 @@ def run_calibration(
     from venti.surface import SENTINEL1_WAVELENGTH_M
 
     ref_decimal = _date_to_decimal_year(disp_product.reference_date)
-    gnss_los, gnss_los_std = _gnss_los_fields(
-        gnss_ref,
-        (los_east, los_north, los_up),
-        disp_file,
-        x,
-        y,
-        cal.downsample_factor,
-        gnss_dir,
-        ref_decimal,
-        _date_to_decimal_year(disp_product.secondary_date),
-    )
+    sec_decimal = _date_to_decimal_year(disp_product.secondary_date)
+    v_opts = cal.to_venti()
+    if v_opts.surface.method == "loclin" and cal.grid_type == "constant":
+        # v0.5: the single sampling path with the grid buffer (R-G2, R-G5)
+        gnss_los, gnss_los_std, gnss_provenance = _gnss_los_fields_enu(
+            v_opts.gnss,
+            Path(unr_grid_latlon_file),
+            gnss_dir,
+            disp_product.get_epsg(),
+            cal.reference_frame,
+            calibration_reference_version,
+            (los_east, los_north, los_up),
+            x,
+            y,
+            cal.downsample_factor,
+            sec_decimal - ref_decimal,
+            defo_area_db_json=defo_area_db_json,
+        )
+        logger.info(
+            "GNSS field: %d grid nodes, buffer %.0f m, %d excluded / %d"
+            " re-interpolated (provenance %s)",
+            gnss_provenance.n_nodes,
+            gnss_provenance.buffer_meters,
+            gnss_provenance.n_excluded,
+            gnss_provenance.n_reinterpolated,
+            gnss_provenance.digest[:12],
+        )
+    else:
+        # gamma route: unchanged, so the gamma golden stays bit-identical
+        gnss_los, gnss_los_std = _gnss_los_fields(
+            gnss_ref,
+            (los_east, los_north, los_up),
+            disp_file,
+            x,
+            y,
+            cal.downsample_factor,
+            gnss_dir,
+            ref_decimal,
+            sec_decimal,
+        )
     # the LOS bands only serve the GNSS projection; three full float32 frames
     del los_east, los_north, los_up
 
