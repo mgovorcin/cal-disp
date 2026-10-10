@@ -135,6 +135,62 @@ def _load_layer(
     return out
 
 
+def _remove_restore_valid(
+    defo_area_db_json: Path | None,
+    event_db_json: Path | None,
+    x: np.ndarray,
+    y: np.ndarray,
+    utm_epsg: int,
+    reference_date: Any,
+    secondary_date: Any,
+) -> np.ndarray | None:
+    """Pixels outside the curated areas and the pair's events (True = valid).
+
+    The v0.5 databases (Venti T32/T41: `id`/`name`/`version`, events with
+    `t0`/`t1`) are read with Venti's loaders and its `Event.affects` rule,
+    and rasterized on the product grid: cheaper than a point-in-polygon test
+    on every pixel centre. None when neither database is given.
+    """
+    if defo_area_db_json is None and event_db_json is None:
+        return None
+    from pyproj import Transformer
+    from rasterio.features import rasterize
+    from rasterio.transform import from_origin
+    from shapely.ops import transform as shp_transform
+    from venti.calibration.remove_restore import load_area_db, load_event_db
+
+    shapes = []
+    if defo_area_db_json is not None:
+        areas = load_area_db(defo_area_db_json)
+        shapes += areas.shapes()
+        logger.info("remove-restore areas: %s (%d)", areas.version, len(areas.items))
+    if event_db_json is not None:
+        events = load_event_db(event_db_json)
+        active = events.active(reference_date, secondary_date)
+        shapes += [e.shape() for e in active]
+        logger.info(
+            "remove-restore events: %s, %d of %d affect the pair %s",
+            events.version,
+            len(active),
+            len(events.items),
+            [e.id for e in active],
+        )
+    shape = (len(y), len(x))
+    if not shapes:
+        return np.ones(shape, dtype=bool)
+    to_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
+    dx, dy = float(x[1] - x[0]), float(y[0] - y[1])
+    transform = from_origin(x[0] - dx / 2, y[0] + dy / 2, dx, dy)
+    inside = rasterize(
+        [(shp_transform(to_utm.transform, g), 1) for g in shapes],
+        out_shape=shape,
+        transform=transform,
+        fill=0,
+        dtype="uint8",
+    ).astype(bool)
+    return ~inside
+
+
 def _read_external_mask(mask_file: Path, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Read the runconfig ``mask_file``: True where the pixel may be used.
 
@@ -809,7 +865,21 @@ def run_calibration(
 
     # Event areas (True = valid) are filled from neighbours before the fit
     event_mask = None
-    if defo_area_db_json is not None or event_db_json is not None:
+    if cal.to_venti().surface.method == "loclin":
+        # v0.5: the Venti databases (T32/T41) and Venti's event rule
+        event_mask = _remove_restore_valid(
+            defo_area_db_json,
+            event_db_json,
+            x,
+            y,
+            disp_product.get_epsg(),
+            disp_product.reference_date,
+            disp_product.secondary_date,
+        )
+        if event_mask is not None:
+            logger.info("Remove-restore: %d pixels to fill", int((~event_mask).sum()))
+    elif defo_area_db_json is not None or event_db_json is not None:
+        # gamma route: the gamma-era GeoJSON (frame_id / event_date), unchanged
         event_mask_file = _build_event_mask(
             disp_file=disp_file,
             defo_area_db=defo_area_db_json,
