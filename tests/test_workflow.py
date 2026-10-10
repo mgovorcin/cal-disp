@@ -197,7 +197,7 @@ def test_unwrap_error_correction_is_off_by_default():
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_run_calibration_unwrap_cycle_is_half_wavelength(
+def test_run_calibration_passes_the_full_wavelength_to_venti(
     tmp_path: Path,
     sample_disp_product: Path,
     sample_static_los: Path,
@@ -205,8 +205,9 @@ def test_run_calibration_unwrap_cycle_is_half_wavelength(
     captured_core,
     enabled: bool,
 ):
-    """Venti rounds region offsets to multiples of its `wavelength_m`; one
-    unwrapping cycle is λ/2 of LOS displacement (two-way path), not λ."""
+    """Venti (>= the T16.3 fix) turns `wavelength_m` into the unwrapping cycle
+    λ/2 itself, so cal-disp passes the radar wavelength unchanged; halving it
+    here too would round region offsets to λ/4."""
     lookup_file, tenv8_dir = sample_unr_data
     run_calibration(
         disp_file=sample_disp_product,
@@ -225,8 +226,17 @@ def test_run_calibration_unwrap_cycle_is_half_wavelength(
     (call,) = captured_core
     assert call["options"].unwrap_error_correction is enabled
     # The fixture product's /identification/radar_wavelength is 0.05546 m
-    assert call["wavelength_m"] == pytest.approx(0.05546 / 2, rel=1e-6)
-    assert call["wavelength_m"] < 0.03  # never the full 55 mm wavelength
+    assert call["wavelength_m"] == pytest.approx(0.05546, rel=1e-6)
+
+
+def test_venti_rounds_to_half_the_wavelength_it_is_given():
+    """The other half of the contract: Venti's surface halves `wavelength_m`."""
+    import inspect
+
+    from venti import surface
+
+    src = inspect.getsource(surface.estimate_calibration_surface)
+    assert "cycle_length=wavelength_m / 2" in src
 
 
 def _displacement_with_nodata(tmp_path: Path) -> tuple[Path, np.ndarray]:

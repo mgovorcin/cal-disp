@@ -306,8 +306,26 @@ VENTI_OPTIONS = {
     "calibration_surface_smoothing_sigma",
     "savitzky_golay",
 }
-# Venti options cal-disp does not expose: each run has its own GNSS cache.
-VENTI_OPTIONS_NOT_EXPOSED = {"recompute_gnss"}
+# Venti options cal-disp does not pass through its config:
+# - recompute_gnss: each run has its own GNSS cache;
+# - downsample_*: cal-disp has its own fields with the same names and passes
+#   them to `estimate_calibration_surface` as arguments (schema v1 behaviour);
+# - the schema-v2 option groups (Venti algorithm_parameters v2, plan T19):
+#   exposed when cal-disp is wired to `calibrate_pair` (plan T37); until then
+#   Venti uses their gamma-equivalent defaults, which reproduce the golden.
+VENTI_OPTIONS_NOT_EXPOSED = {
+    "recompute_gnss",
+    "downsample_factor",
+    "downsample_method",
+    "downsample_weighted",
+    "surface",
+    "weights",
+    "tropo",
+    "gnss",
+    "uncertainty",
+    "unwrap",
+    "frame",
+}
 
 
 class AlgorithmParameters(YamlModel):
