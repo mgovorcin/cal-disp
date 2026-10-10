@@ -890,12 +890,27 @@ def run_calibration(
     if result.sigma_cal is not None:
         # loclin surface: sigma_CAL (Venti R-E1) of the calibration itself
         std_values = np.asarray(result.sigma_cal, dtype=np.float32)
+        s0_m = venti_options.uncertainty.sigma_nonsecular_meters
         uncertainty_source = (
-            "sigma_CAL: sqrt((k * sigma_GNSS)^2 + sigma_fit^2) with k ="
-            f" {venti_options.uncertainty.k_grid} for the UNR {cal.grid_type}"
-            " grid and sigma_fit the kernel's standard error, grown inside"
-            " interpolated defo/event areas. Covers the calibration only; add"
-            " the DISP noise below the cutoff."
+            "sigma_CAL: sqrt((k * sigma_GNSS)^2 + sigma_fit^2"
+            + (
+                f" + sigma_nonsecular^2) with sigma_nonsecular = {s0_m * 1000:g} mm"
+                if s0_m > 0
+                else ")"
+            )
+            + f", k = {venti_options.uncertainty.k_grid} for the UNR"
+            f" {cal.grid_type} grid and sigma_fit the kernel's standard error,"
+            " grown inside interpolated defo/event areas. It is the uncertainty"
+            " of the calibration surface (the secular long-wavelength field)."
+            " Add the DISP noise below the cutoff"
+            + (
+                "."
+                if s0_m > 0
+                else (
+                    " and, for one pair, non-secular station motion (seasonal"
+                    " loading; 2.6-4.9 mm on the validation frames)."
+                )
+            )
         )
     else:
         # windowed_plane (gamma): GNSS reference uncertainty, not that of the
