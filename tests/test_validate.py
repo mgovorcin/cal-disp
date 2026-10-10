@@ -429,3 +429,45 @@ def test_one_default_tolerance():
     for opt in cli.params:
         if opt.name in ("rtol", "atol", "tolerance"):
             assert opt.default is None  # resolved to DEFAULT_TOLERANCE at run time
+
+
+def _set_algorithm_parameters(product: Path, params) -> None:
+    from io import StringIO
+
+    buf = StringIO()
+    params.to_yaml(buf, with_comments=False)
+    with h5py.File(product, "a") as f:
+        f["metadata/algorithm_parameters_yaml"][()] = buf.getvalue()
+
+
+def test_new_option_groups_at_defaults_compare_equal(
+    reference_product, test_product, caplog
+):
+    """A golden written before an additive option group (e.g. Venti's schema-v2
+    `surface`) matches a test product that records the group at its default."""
+    from cal_disp.config._algorithm import AlgorithmParameters
+
+    _set_algorithm_parameters(test_product, AlgorithmParameters())  # full dump
+    ok, log = _validate(reference_product, test_product, caplog)
+    assert ok, log
+
+
+def test_algorithm_parameter_changes_still_fail(
+    reference_product, test_product, caplog
+):
+    from cal_disp.config._algorithm import AlgorithmParameters
+
+    params = AlgorithmParameters().with_overrides(
+        {
+            "calibration_options": {
+                "surface": {"method": "loclin"},
+                "window_size_meters": 1000.0,
+            }
+        }
+    )
+    _set_algorithm_parameters(test_product, params)
+    ok, log = _validate(reference_product, test_product, caplog)
+    assert not ok
+    assert "algorithm_parameters_yaml: parameters differ" in log
+    assert "calibration_options.surface.method" in log
+    assert "calibration_options.window_size_meters" in log

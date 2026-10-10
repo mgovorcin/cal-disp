@@ -168,6 +168,18 @@ def _read_external_mask(mask_file: Path, x: np.ndarray, y: np.ndarray) -> np.nda
     return data == 1
 
 
+def _read_dem_on_grid(dem_file: Path, shape: tuple[int, int]) -> np.ndarray:
+    """Read the DISP-S1-STATIC DEM (float64, NaN for nodata); must be on the grid."""
+    with rasterio.open(dem_file) as src:
+        if src.shape != tuple(shape):
+            raise ValueError(
+                f"dem_file {Path(dem_file).name}: shape {src.shape} does not match"
+                f" the DISP grid {tuple(shape)}"
+            )
+        dem = src.read(1, masked=True).astype(np.float64)
+    return np.ma.filled(dem, np.nan)
+
+
 def _date_to_decimal_year(dt: datetime) -> float:
     """Convert a datetime to a decimal year (e.g. 2022.55)."""
     year = dt.year
@@ -596,8 +608,10 @@ def run_calibration(
     los_east, los_north, los_up = _load_los_bands(los_file)
 
     # GNSS LOS reference for this interval (Venti returns mm; disp is in m)
+    from venti.calibration.tropo import apply_tropo, choose_tropo_mode
+    from venti.calibration.two_pass import calibrate_pair
     from venti.io import read_netcdf_correction
-    from venti.surface import SENTINEL1_WAVELENGTH_M, estimate_calibration_surface
+    from venti.surface import SENTINEL1_WAVELENGTH_M
 
     ref_decimal = _date_to_decimal_year(disp_product.reference_date)
     gnss_los, gnss_los_std = _gnss_los_fields(
@@ -645,22 +659,40 @@ def run_calibration(
                 event_mask = _src.read(1).astype(bool)
             logger.info("Event mask: %d pixels to fill", int((~event_mask).sum()))
 
-    # Signals GNSS does not contain: removed before the fit, added back to
-    # the surface
-    corrections: list[np.ndarray] = []
-    _tropo_applied = False
-    use_tropo = bool(reference_tropo_files and secondary_tropo_files)
-    if use_tropo and not cal.apply_tropo_correction:
-        logger.info("apply_tropo_correction=false; ignoring the tropo files")
-        use_tropo = False
-    if use_tropo:
+    # Signals GNSS does not contain: removed before the fit and restored into
+    # the calibration as components (Venti calibrate_pair; calibration ==
+    # sum of components)
+    venti_options = cal.to_venti()
+    have_tropo_files = bool(reference_tropo_files and secondary_tropo_files)
+    dem_2d = None
+    if venti_options.tropo.mode in ("auto", "stratified") and have_tropo_files:
+        if dem_file is None:
+            raise ValueError(
+                f"tropo mode {venti_options.tropo.mode!r} needs dem_file (DEM relief"
+                " and the stratified fit)"
+            )
+        dem_2d = _read_dem_on_grid(dem_file, disp_2d.shape)
+    tropo_mode = choose_tropo_mode(
+        venti_options.tropo,
+        dem_2d,
+        apply_tropo_correction=cal.apply_tropo_correction,
+        valid=mask,
+    )
+    tropo_component = None
+    if tropo_mode != "off" and not have_tropo_files:
+        logger.info("tropo mode %s but no tropo files; calibrating without", tropo_mode)
+    elif tropo_mode == "off" and have_tropo_files:
+        logger.info("tropo mode off; ignoring the tropo files")
+    elif tropo_mode != "off":
         if dem_file is None:
             raise ValueError(
                 "dem_file is required when tropospheric correction files are provided"
             )
         from cal_disp.prep.tropo import prepare_troposphere_correction
 
-        logger.info("Preparing tropospheric correction (ref + sec)...")
+        logger.info(
+            "Preparing tropospheric correction (ref + sec), mode %s...", tropo_mode
+        )
         tropo_dir = work_directory / "troposphere"
         ref_tropo_path, sec_tropo_path = prepare_troposphere_correction(
             disp_file=disp_file,
@@ -674,10 +706,11 @@ def run_calibration(
             ref_tropo = _src.read(1).astype(np.float32)
         with rasterio.open(sec_tropo_path) as _src:
             sec_tropo = _src.read(1).astype(np.float32)
-        corrections.append(sec_tropo - ref_tropo)
-        _tropo_applied = True
+        tropo_component = apply_tropo(
+            sec_tropo - ref_tropo, tropo_mode, dem=dem_2d, valid=mask, x=x, y=y
+        )
 
-    _set_applied = False
+    set_component = None
     if cal.apply_solid_earth_tide_correction:
         set_corr = read_netcdf_correction(disp_file, "solid_earth_tide")
         if set_corr is None:
@@ -687,22 +720,21 @@ def run_calibration(
                 disp_file.name,
             )
         else:
-            corrections.append(set_corr.astype(np.float32))
-            _set_applied = True
+            set_component = set_corr.astype(np.float32)
 
-    weights = None
-    if cal.downsample_factor > 1 and cal.downsample_weighted:
-        if "temporal_coherence" not in ds_disp:
-            raise ValueError(
-                "downsample_weighted=True but temporal_coherence is not in"
-                f" {disp_file.name}"
-            )
-        weights = ds_disp.temporal_coherence.values.astype(np.float32)
+    coherence = None
+    if "temporal_coherence" in ds_disp:
+        coherence = ds_disp.temporal_coherence.values.astype(np.float32)
+    elif cal.downsample_factor > 1 and cal.downsample_weighted:
+        raise ValueError(
+            "downsample_weighted=True but temporal_coherence is not in"
+            f" {disp_file.name}"
+        )
 
     ref_point = _find_reference_point(ds_disp, mask)
     # Radar wavelength from the product so other sensors (e.g. NISAR) are
-    # handled too. Venti turns it into the unwrapping cycle, lambda/2 of LOS
-    # displacement (`_unwrap_cycle_length_m`, kept for the walkthrough).
+    # handled too; one unwrapping cycle is lambda/2 of LOS displacement
+    # (`_unwrap_cycle_length_m`).
     wavelength_m = (
         _read_wavelength_m(disp_file)
         if cal.unwrap_error_correction
@@ -710,36 +742,36 @@ def run_calibration(
     )
 
     logger.info(
-        "Fitting calibration surface (window=%d px, downsample=%d, corrections:"
-        " tropo=%s, SET=%s)...",
+        "Fitting calibration surface (%s, window=%d px, downsample=%d, tropo=%s,"
+        " SET=%s)...",
+        venti_options.surface.method,
         cal.window_size_pixels,
         cal.downsample_factor,
-        _tropo_applied,
-        _set_applied,
+        tropo_mode if tropo_component is not None else "off",
+        set_component is not None,
     )
     try:
-        result = estimate_calibration_surface(
+        result = calibrate_pair(
             disp_2d,
             gnss_los,
             mask,
             ref_point,
-            cal.window_size_pixels,
-            corrections=corrections,
-            gnss_los_std=gnss_los_std if cal.weight_fit_by_gnss_uncertainty else None,
-            event_mask=event_mask,
-            options=cal.to_venti(),
-            # Venti >= the T16.3 fix halves the wavelength itself; passing the
-            # cycle length here would round region offsets to lambda/4.
-            wavelength_m=wavelength_m,
-            downsample_factor=cal.downsample_factor,
-            downsample_method=cal.downsample_method,
-            downsample_weights=weights,
+            venti_options,
+            cal.posting_meters,
+            _unwrap_cycle_length_m(wavelength_m),
+            gnss_los_std=gnss_los_std,
+            coherence=coherence,
+            tropo=tropo_component,
+            set_correction=set_component,
+            exclude_mask=~event_mask if event_mask is not None else None,
             n_jobs=threads_per_worker,
         )
     except ValueError as exc:
         exc.add_note(f"While calibrating {disp_file.name}")
         raise
-    cal_surface_m = result.surface.astype(np.float32)
+    _tropo_applied = result.components_applied["cal_tropo"]
+    _set_applied = result.components_applied["cal_set"]
+    cal_surface_m = result.calibration.astype(np.float32)
     nodata_pixel_count = int(np.isnan(cal_surface_m).sum())
 
     coords = {"time": time, "y": y, "x": x}
@@ -763,22 +795,35 @@ def run_calibration(
             ),
         },
     )
-    # TODO: improve. GNSS reference uncertainty, not that of the fitted
-    # surface. Clipped at 0: Venti's RBF interpolation can overshoot below 0.
+    if result.sigma_cal is not None:
+        # loclin surface: sigma_CAL (Venti R-E1) of the calibration itself
+        std_values = np.asarray(result.sigma_cal, dtype=np.float32)
+        uncertainty_source = (
+            "sigma_CAL: sqrt((k * sigma_GNSS)^2 + sigma_fit^2) with k ="
+            f" {venti_options.uncertainty.k_grid} for the UNR {cal.grid_type}"
+            " grid and sigma_fit the kernel's standard error, grown inside"
+            " interpolated defo/event areas. Covers the calibration only; add"
+            " the DISP noise below the cutoff."
+        )
+    else:
+        # windowed_plane (gamma): GNSS reference uncertainty, not that of the
+        # fitted surface. Clipped at 0: Venti's RBF interpolation can overshoot.
+        std_values = np.clip(gnss_los_std, 0, None)
+        uncertainty_source = (
+            "GNSS reference uncertainty: UNR"
+            f" {cal.grid_type}-grid sigmas projected to LOS and interpolated"
+            " to each pixel (rate sigma x interval for 'constant', combined"
+            " reference/secondary position sigma for 'variable'). Not the"
+            " uncertainty of the fitted calibration surface."
+        )
     calibration_std = xr.DataArray(
-        np.clip(gnss_los_std, 0, None)[np.newaxis, :, :],
+        std_values[np.newaxis, :, :],
         coords=coords,
         dims=["time", "y", "x"],
         attrs={
             "units": "meters",
             "long_name": "calibration_uncertainty",
-            "uncertainty_source": (
-                "GNSS reference uncertainty: UNR"
-                f" {cal.grid_type}-grid sigmas projected to LOS and interpolated"
-                " to each pixel (rate sigma x interval for 'constant', combined"
-                " reference/secondary position sigma for 'variable'). Not the"
-                " uncertainty of the fitted calibration surface."
-            ),
+            "uncertainty_source": uncertainty_source,
         },
     )
 

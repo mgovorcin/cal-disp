@@ -6,6 +6,15 @@ from collections.abc import Mapping
 from typing import Any, Literal, Optional
 
 from pydantic import Field, computed_field
+from venti.workflow.config import (
+    FrameOptions,
+    GnssOptions,
+    SurfaceOptions,
+    TropoOptions,
+    UncertaintyOptions,
+    UnwrapOptions,
+    WeightOptions,
+)
 
 from ._yaml import YamlModel, _computed_fields_exclude
 
@@ -267,6 +276,45 @@ class CalibrationOptions(YamlModel):
         ),
     )
 
+    # Venti algorithm_parameters schema v2 (Venti plan T19, T37.1). The
+    # defaults reproduce the gamma algorithm; the v0.5 algorithm is switched
+    # on here (e.g. surface.method: loclin), per frame through the overrides.
+    surface: SurfaceOptions = Field(
+        default_factory=SurfaceOptions,
+        description=(
+            "Calibration surface estimator: 'windowed_plane' (gamma) or 'loclin'"
+            " (local-linear kernel with a half-response cutoff, two passes)."
+        ),
+    )
+    weights: WeightOptions = Field(
+        default_factory=WeightOptions,
+        description="Fit weights of the loclin surface (coherence power, robust).",
+    )
+    tropo: TropoOptions = Field(
+        default_factory=TropoOptions,
+        description=(
+            "Tropospheric correction mode: 'legacy' follows"
+            " apply_tropo_correction; 'off', 'full', 'stratified' or 'auto'"
+            " (from the DEM relief)."
+        ),
+    )
+    gnss: GnssOptions = Field(
+        default_factory=GnssOptions,
+        description="GNSS grid handling (buffer, defo-node exclusion).",
+    )
+    uncertainty: UncertaintyOptions = Field(
+        default_factory=UncertaintyOptions,
+        description="calibration_std model of the loclin surface (sigma_CAL).",
+    )
+    unwrap: UnwrapOptions = Field(
+        default_factory=UnwrapOptions,
+        description="Unwrap-error correction details (used when it is enabled).",
+    )
+    frame: FrameOptions = Field(
+        default_factory=FrameOptions,
+        description="Frame-level facts from the frame-parameter table (plate).",
+    )
+
     @computed_field  # type: ignore[misc]
     @property
     def window_size_pixels(self) -> int:
@@ -274,11 +322,7 @@ class CalibrationOptions(YamlModel):
         return max(1, int(self.window_size_meters / self.posting_meters))
 
     def to_venti(self):
-        """Venti ``CalibrationOptions`` with these settings.
-
-        Options Venti does not take from its config (downsampling) are
-        passed to ``estimate_calibration_surface`` separately.
-        """
+        """Return Venti's ``CalibrationOptions`` with these settings."""
         from venti.workflow.config import CalibrationOptions as VentiOptions
 
         return VentiOptions(
@@ -305,16 +349,6 @@ VENTI_OPTIONS = {
     "calibration_surface_smoothing_method",
     "calibration_surface_smoothing_sigma",
     "savitzky_golay",
-}
-# Venti options cal-disp does not pass through its config:
-# - recompute_gnss: each run has its own GNSS cache;
-# - downsample_*: cal-disp has its own fields with the same names and passes
-#   them to `estimate_calibration_surface` as arguments (schema v1 behaviour);
-# - the schema-v2 option groups (Venti algorithm_parameters v2, plan T19):
-#   exposed when cal-disp is wired to `calibrate_pair` (plan T37); until then
-#   Venti uses their gamma-equivalent defaults, which reproduce the golden.
-VENTI_OPTIONS_NOT_EXPOSED = {
-    "recompute_gnss",
     "downsample_factor",
     "downsample_method",
     "downsample_weighted",
@@ -326,6 +360,8 @@ VENTI_OPTIONS_NOT_EXPOSED = {
     "unwrap",
     "frame",
 }
+# Venti options cal-disp does not expose: each run has its own GNSS cache.
+VENTI_OPTIONS_NOT_EXPOSED = {"recompute_gnss"}
 
 
 class AlgorithmParameters(YamlModel):
