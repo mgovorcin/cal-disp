@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rasterio
@@ -316,6 +317,56 @@ def _quality_reference_point(
         return int(rows[idx]), int(cols[idx])
     msg = f"No valid candidates found with quality above {min_quality}"
     raise ValueError(msg)
+
+
+def _build_unwrap_hook(
+    ds_disp: xr.Dataset,
+    disp_2d: np.ndarray,
+    gnss_los: np.ndarray,
+    mask: np.ndarray,
+    venti_options: Any,
+    posting_meters: float,
+    *,
+    pair: str = "",
+) -> Any:
+    """Build the whole-cycle unwrap hook of the loclin route (Venti T36, R-U1).
+
+    Regions come from the DISP ``water_mask`` (land without
+    ``temporal_coherence`` does not join regions); the medians use the same
+    valid mask as the fit. ``timeseries_inversion_residuals`` is read only when
+    the residual gate is configured.
+    """
+    from venti.unwrap import unwrap_hook_for_pair
+
+    land = (
+        ds_disp.water_mask.values.astype(bool)
+        if "water_mask" in ds_disp
+        else np.ones(disp_2d.shape, dtype=bool)
+    )
+    data_valid = (
+        np.isfinite(ds_disp.temporal_coherence.values)
+        if "temporal_coherence" in ds_disp
+        else np.isfinite(disp_2d)
+    )
+    residual = None
+    if venti_options.unwrap.residual_gate_cycles is not None:
+        if "timeseries_inversion_residuals" not in ds_disp:
+            msg = (
+                "unwrap.residual_gate_cycles is set but the DISP product has no"
+                " timeseries_inversion_residuals"
+            )
+            raise ValueError(msg)
+        residual = ds_disp.timeseries_inversion_residuals.values
+    return unwrap_hook_for_pair(
+        np.squeeze(land),
+        np.squeeze(data_valid),
+        gnss_los,
+        mask,
+        venti_options,
+        posting_meters,
+        inversion_residual=np.squeeze(residual) if residual is not None else None,
+        pair=pair,
+    )
 
 
 def _find_reference_point(ds_disp: xr.Dataset, mask: np.ndarray) -> tuple[int, int]:
@@ -750,6 +801,17 @@ def run_calibration(
         tropo_mode if tropo_component is not None else "off",
         set_component is not None,
     )
+    unwrap_hook = None
+    if cal.unwrap_error_correction and venti_options.surface.method == "loclin":
+        unwrap_hook = _build_unwrap_hook(
+            ds_disp,
+            disp_2d,
+            gnss_los,
+            mask,
+            venti_options,
+            cal.posting_meters,
+            pair=disp_file.name,
+        )
     try:
         result = calibrate_pair(
             disp_2d,
@@ -765,10 +827,19 @@ def run_calibration(
             set_correction=set_component,
             exclude_mask=~event_mask if event_mask is not None else None,
             n_jobs=threads_per_worker,
+            unwrap_hook=unwrap_hook,
         )
     except ValueError as exc:
         exc.add_note(f"While calibrating {disp_file.name}")
         raise
+    if result.unwrap_decisions is not None:
+        decisions_csv = output_dir / "unwrap_decisions.csv"
+        result.unwrap_decisions.to_csv(decisions_csv)
+        logger.info(
+            "Unwrap-error correction: %s (%s)",
+            result.unwrap_decisions.summary(),
+            decisions_csv,
+        )
     _tropo_applied = result.components_applied["cal_tropo"]
     _set_applied = result.components_applied["cal_set"]
     cal_surface_m = result.calibration.astype(np.float32)
