@@ -115,10 +115,23 @@ def _load_displacement(ds_disp: xr.Dataset, block_rows: int = 512) -> np.ndarray
     full float64 array is never held and nothing stays cached.  The values
     equal ``displacement.values.astype(np.float32)`` exactly.
     """
-    displacement = ds_disp["displacement"]
-    out = np.empty(displacement.shape, dtype=np.float32)
-    for row in range(0, displacement.shape[0], block_rows):
-        out[row : row + block_rows] = displacement[row : row + block_rows].values
+    return _load_layer(ds_disp, "displacement", np.float32, block_rows)
+
+
+def _load_layer(
+    ds_disp: xr.Dataset, name: str, dtype: type, block_rows: int = 512
+) -> np.ndarray:
+    """Load one 2-D layer in row blocks into a new `dtype` array.
+
+    ``ds[name].values`` keeps the decoded array (often float32 or float64,
+    even for masks) cached in the dataset for the rest of the run; reading
+    row blocks into a preallocated array holds only the output. The values
+    equal ``ds[name].values.astype(dtype)``.
+    """
+    layer = ds_disp[name]
+    out = np.empty(layer.shape, dtype=dtype)
+    for row in range(0, layer.shape[0], block_rows):
+        out[row : row + block_rows] = layer[row : row + block_rows].values
     return out
 
 
@@ -369,14 +382,17 @@ def _build_unwrap_hook(
     )
 
 
-def _find_reference_point(ds_disp: xr.Dataset, mask: np.ndarray) -> tuple[int, int]:
+def _find_reference_point(
+    coherence: np.ndarray | None, mask: np.ndarray
+) -> tuple[int, int]:
     """Choose the reference pixel ``(row, col)`` for one product.
 
     Venti's rule (`_quality_reference_point`, ported from ``opera_utils``)
-    applied to the product's temporal coherence over valid pixels.
+    applied to the product's temporal coherence over valid pixels (all
+    pixels equal when the product has no coherence layer).
     """
-    if "temporal_coherence" in ds_disp:
-        quality = ds_disp.temporal_coherence.values.astype(np.float32)
+    if coherence is not None:
+        quality = np.asarray(coherence, dtype=np.float32)
     else:
         quality = np.ones(mask.shape, dtype=np.float32)
     quality = np.where(mask & np.isfinite(quality), quality, 0.0).astype(np.float32)
@@ -676,6 +692,8 @@ def run_calibration(
         ref_decimal,
         _date_to_decimal_year(disp_product.secondary_date),
     )
+    # the LOS bands only serve the GNSS projection; three full float32 frames
+    del los_east, los_north, los_up
 
     # Displacement (m): float64 on disk, read in row blocks straight into
     # float32 so the float64 array is never held or cached in `ds_disp`
@@ -684,9 +702,9 @@ def run_calibration(
     # Valid pixels (both masks: 1 = valid)
     mask = ~np.isnan(disp_2d)
     if "recommended_mask" in ds_disp:
-        mask &= ds_disp.recommended_mask.values.astype(bool)
+        mask &= _load_layer(ds_disp, "recommended_mask", bool)
     if "water_mask" in ds_disp:
-        mask &= ds_disp.water_mask.values.astype(bool)
+        mask &= _load_layer(ds_disp, "water_mask", bool)
     if mask_file is not None:
         external = _read_external_mask(Path(mask_file), x, y)
         logger.info(
@@ -771,18 +789,19 @@ def run_calibration(
                 disp_file.name,
             )
         else:
-            set_component = set_corr.astype(np.float32)
+            set_component = set_corr.astype(np.float32, copy=False)
+            del set_corr
 
     coherence = None
     if "temporal_coherence" in ds_disp:
-        coherence = ds_disp.temporal_coherence.values.astype(np.float32)
+        coherence = _load_layer(ds_disp, "temporal_coherence", np.float32)
     elif cal.downsample_factor > 1 and cal.downsample_weighted:
         raise ValueError(
             "downsample_weighted=True but temporal_coherence is not in"
             f" {disp_file.name}"
         )
 
-    ref_point = _find_reference_point(ds_disp, mask)
+    ref_point = _find_reference_point(coherence, mask)
     # Radar wavelength from the product so other sensors (e.g. NISAR) are
     # handled too; one unwrapping cycle is lambda/2 of LOS displacement
     # (`_unwrap_cycle_length_m`).
@@ -828,6 +847,8 @@ def run_calibration(
             exclude_mask=~event_mask if event_mask is not None else None,
             n_jobs=threads_per_worker,
             unwrap_hook=unwrap_hook,
+            # the product carries calibration and sigma_CAL only
+            diagnostic_maps=False,
         )
     except ValueError as exc:
         exc.add_note(f"While calibrating {disp_file.name}")

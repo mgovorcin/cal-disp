@@ -64,11 +64,11 @@ def test_report_mode_reads_a_pip_resolution(budget_mod, tmp_path, capsys):
 def test_peak_memory_against_the_budget(budget_mod, tmp_path, capsys):
     log = tmp_path / "run.log"
     log.write_text(
-        "...\nMaximum memory usage: 9.10 GB\n...\nMaximum memory usage: 5.31 GB\n"
+        "...\nMaximum memory usage: 9.10 GB\n...\nMaximum memory usage: 3.95 GB\n"
     )
-    assert budget_mod.peak_memory_gb(log.read_text()) == 5.31
+    assert budget_mod.peak_memory_gb(log.read_text()) == 3.95
     assert budget_mod.main(["--peak-memory-log", str(log)]) == 0
-    log.write_text("Maximum memory usage: 7.50 GB\n")
+    log.write_text("Maximum memory usage: 5.10 GB\n")  # above the 4.5 GB budget
     assert budget_mod.main(["--peak-memory-log", str(log)]) == 1
     assert "FAILED" in capsys.readouterr().out
     with pytest.raises(ValueError, match="Maximum memory usage"):

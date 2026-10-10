@@ -40,6 +40,7 @@ dependencies = [
   "click",
   "matplotlib",
   "cmap",  # browse image colormaps
+  "threadpoolctl",  # worker_settings cap the BLAS/OpenMP threads
   # Core only: frame/burst helpers. The reference pixel rule is ported into
   # cal_disp.workflow, so the core image needs no opera_utils.disp (dask,
   # zarr, s3fs); the `download` extra brings it for DISP staging.
@@ -48,7 +49,7 @@ dependencies = [
   # gamma golden, upstream only after the gamma tag). With gamma-equivalent
   # algorithm parameters it must reproduce the golden at 1e-6. The gamma
   # golden was produced with upstream 2a7e61f.
-  "venti @ git+https://github.com/mgovorcin/venti-dev.git@c10ba88be6cdb38bdcbcb16f0b31a9bc696c927f",
+  "venti @ git+https://github.com/mgovorcin/venti-dev.git@07d149e8d709bb9d394c0fd58642bdb5f344ad62",
 ]
 
 [project.urls]
@@ -200,6 +201,7 @@ tqdm = "*"
 click = "*"
 matplotlib-base = "*"
 cmap = "*"
+threadpoolctl = "*"
 pip = "*"
 
 [tool.pixi.pypi-dependencies]

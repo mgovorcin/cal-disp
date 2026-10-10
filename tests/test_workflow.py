@@ -349,15 +349,34 @@ def test_find_reference_point():
     coherence[30, 5] = 1.0  # higher, but masked out
     mask = np.ones(coherence.shape, dtype=bool)
     mask[30, 5] = False
-    ds = xr.Dataset(
-        {"temporal_coherence": (["y", "x"], coherence)},
-        coords={"y": 1000.0 - 30.0 * np.arange(40), "x": 30.0 * np.arange(50)},
-    )
 
-    row, col = _find_reference_point(ds, mask)
+    row, col = _find_reference_point(coherence, mask)
 
     assert 5 <= row < 15
     assert 30 <= col < 45
+    # no coherence layer: every valid pixel ties, the rule still returns one
+    r0, c0 = _find_reference_point(None, mask)
+    assert mask[r0, c0]
+
+
+@pytest.mark.parametrize("dtype", [bool, np.float32])
+def test_load_layer_matches_values_and_caches_nothing(tmp_path: Path, dtype):
+    """Masks and coherence are read in row blocks: same values as
+    ``.values.astype``, and the dataset keeps no decoded copy."""
+    from cal_disp.workflow import _load_layer
+
+    rng = np.random.default_rng(1)
+    values = rng.random((37, 23)).astype(np.float32)
+    values[2, :] = np.nan
+    if dtype is bool:
+        values = (values > 0.5).astype(np.float32)
+    path = tmp_path / "layer.nc"
+    xr.Dataset({"layer": (["y", "x"], values)}).to_netcdf(path, engine="h5netcdf")
+    with xr.open_dataset(path, engine="h5netcdf") as ds:
+        loaded = _load_layer(ds, "layer", dtype, block_rows=5)
+        assert not ds["layer"].variable._in_memory
+        np.testing.assert_array_equal(loaded, ds["layer"].values.astype(dtype))
+    assert loaded.dtype == np.dtype(dtype)
 
 
 @pytest.mark.parametrize("seed", range(6))

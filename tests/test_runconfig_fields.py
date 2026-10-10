@@ -387,3 +387,30 @@ class TestConfigFilePath:
 
         assert result.exit_code == 2
         assert not (tmp_path / "work" / "runconfig.yaml").exists()
+
+
+# worker_settings cap the thread pools (Venti T47.3)
+
+
+def test_worker_settings_cap_the_blas_threads(tmp_path: Path, groups):
+    """During the calibration every BLAS/OpenMP pool is limited to
+    n_workers x threads_per_worker; the limit is lifted afterwards."""
+    from threadpoolctl import threadpool_info
+
+    from cal_disp import main
+    from cal_disp.config._workers import WorkerSettings
+
+    workflow = _workflow(tmp_path, groups)
+    workflow.worker_settings = WorkerSettings(n_workers=1, threads_per_worker=2)
+    seen: list[int] = []
+
+    def fake(**_kwargs):
+        seen.extend(p["num_threads"] for p in threadpool_info())
+        return tmp_path / "out" / "product.nc"
+
+    with (
+        patch.object(main, "run_calibration", side_effect=fake),
+        patch.object(main, "make_browse_image_from_nc"),
+    ):
+        main.run(workflow)
+    assert seen and max(seen) <= 2
