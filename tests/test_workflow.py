@@ -902,3 +902,42 @@ def test_loclin_unwrap_end_to_end_writes_decisions(
     assert (tmp_path / "out" / "unwrap_decisions.csv").exists()
     with xr.open_dataset(out) as ds:
         assert np.isfinite(ds["calibration"].values).mean() > 0.9
+
+
+@pytest.mark.parametrize("s0", [0.0, 0.003])
+def test_calibration_std_states_what_sigma_cal_covers(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    s0: float,
+):
+    """sigma_CAL is the calibration-surface uncertainty (owner, 2026-10-09);
+    the optional non-secular term is named with its value when set, and the
+    users are told to add it when not."""
+    lookup_file, tenv8_dir = sample_unr_data
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": False,
+                "downsample_factor": 2,
+                "surface": {"method": "loclin", "cutoff_wavelength_meters": 5000.0},
+                "uncertainty": {"k_grid": 3.9, "sigma_nonsecular_meters": s0},
+            }
+        }
+    )
+    out = run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=params,
+    )
+    with xr.open_dataset(out) as ds:
+        source = ds["calibration_std"].attrs["uncertainty_source"]
+    assert "uncertainty of the calibration surface" in source
+    if s0:
+        assert "sigma_nonsecular = 3 mm" in source
+    else:
+        assert "non-secular station motion" in source
