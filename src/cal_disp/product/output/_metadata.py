@@ -19,6 +19,7 @@ def build_metadata_dataset(
     product_landing_page_doi: str | None = None,
     product_specification_document_id: str | None = None,
     pge_runconfig: str | None = None,
+    gnss_provenance_json: str | None = None,
 ) -> xr.Dataset:
     """Build metadata dataset with algorithm and processing information.
 
@@ -55,6 +56,11 @@ def build_metadata_dataset(
         Product specification document identifier.
     pge_runconfig : str or None, optional
         Full PGE runconfig YAML file content.
+    gnss_provenance_json : str or None, optional
+        GNSS realisation record (Venti ``Provenance.as_dict()`` as JSON), written
+        as ``gnss_provenance`` when given (v0.5 route); VLM verifies it
+        (``venti.gnss.vlm``). Omitted otherwise, so the gamma product is
+        unchanged.
 
     Returns
     -------
@@ -224,6 +230,20 @@ def build_metadata_dataset(
                 "long_name": "PGE Run Configuration",
                 "dtype": "str",
                 "format": "YAML",
+            },
+        )
+
+    if gnss_provenance_json is not None:
+        data_vars["gnss_provenance"] = xr.DataArray(
+            gnss_provenance_json,
+            attrs={
+                "description": (
+                    "GNSS realisation the calibration was tied to (grid version and"
+                    " type, reference frame, snapshot, lookup hash, buffer, defo DB"
+                    " version, config and field hashes), JSON"
+                ),
+                "long_name": "GNSS Provenance",
+                "dtype": "str",
             },
         )
 

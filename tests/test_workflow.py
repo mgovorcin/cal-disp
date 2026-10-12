@@ -805,6 +805,48 @@ def test_loclin_end_to_end_writes_sigma_cal(
     assert np.nanmin(std) > 0
 
 
+def test_gnss_provenance_written_on_v05_route_only(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+):
+    """T37.3: the loclin (v0.5) route records the GNSS realisation in
+    /metadata/gnss_provenance, readable by VLM (venti.gnss.vlm); the gamma
+    route writes none, so the gamma golden keeps its structure."""
+    from venti.gnss.vlm import PROVENANCE_KEYS, read_cal_provenance
+
+    lookup_file, tenv8_dir = sample_unr_data
+
+    def run(overrides: dict, name: str) -> Path:
+        params = AlgorithmParameters.create_default().with_overrides(
+            {
+                "calibration_options": {
+                    "apply_solid_earth_tide_correction": False,
+                    "downsample_factor": 2,
+                    **overrides,
+                }
+            }
+        )
+        return run_calibration(
+            disp_file=sample_disp_product,
+            unr_grid_latlon_file=lookup_file,
+            unr_timeseries_dir=tenv8_dir,
+            output_dir=tmp_path / name,
+            los_file=sample_static_los,
+            algorithm_parameters=params,
+        )
+
+    v05 = run(
+        {"surface": {"method": "loclin", "cutoff_wavelength_meters": 5000.0}}, "v05"
+    )
+    record = read_cal_provenance(v05)
+    assert record is not None
+    assert set(PROVENANCE_KEYS) <= set(record)
+    assert record["grid_type"] == "constant" and len(record["digest"]) == 64
+    assert read_cal_provenance(run({}, "gamma")) is None
+
+
 def test_algorithm_options_reach_venti():
     """The schema-v2 groups of algorithm_parameters arrive in Venti unchanged."""
     params = AlgorithmParameters.create_default().with_overrides(
