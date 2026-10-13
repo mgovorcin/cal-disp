@@ -37,8 +37,8 @@ DEFAULT_TIMEOUT: tuple[float, float] = (10.0, 120.0)
 # Statuses worth a retry with backoff: rate limiting, transient server errors
 RETRY_STATUSES = (429, 500, 502, 503, 504)
 # Suffix of the file a download is streamed to before the atomic rename
+# (the same as geepers' downloader, which `download_file` delegates to)
 PART_SUFFIX = ".part"
-CHUNK_SIZE = 1 << 16
 
 # Constants
 VALID_VERSIONS = {"0.1", "0.2", "0.3"}
@@ -107,12 +107,6 @@ def create_session(retries: int = 5, backoff: float = 1.0) -> requests.Session:
     return session
 
 
-def _looks_like_html(head: bytes) -> bool:
-    """Whether the first bytes of a body are an HTML document."""
-    start = head.lstrip()[:32].lower()
-    return start.startswith((b"<!doctype html", b"<html", b"<head", b"<body"))
-
-
 def download_file(
     url: str,
     output_path: Path,
@@ -121,10 +115,12 @@ def download_file(
 ) -> Path:
     """Download ``url`` to ``output_path`` atomically, verifying the body.
 
-    The body is streamed to ``<output_path>.part`` and renamed into place
-    only after it passed the checks, so ``output_path`` never holds a
-    partial file: an existing ``output_path`` can be trusted and skipped by
-    the callers, while a leftover ``.part`` is always re-downloaded.
+    Delegates to `geepers.gps_sources._download.download_file`, the copy of
+    this function geepers took over (Venti plan T26.2): the body streams to
+    ``<output_path>.part`` and is renamed into place only after the checks
+    pass, so an existing ``output_path`` is complete and a leftover
+    ``.part`` is re-downloaded. cal-disp adds its retrying session and keeps
+    its own `DownloadError`, which the CLI maps to an exit code.
 
     Parameters
     ----------
@@ -147,61 +143,24 @@ def download_file(
     requests.HTTPError
         On a non-2xx status (after the session's retries).
     requests.Timeout or requests.ConnectionError
-        When the server does not answer within ``timeout`` (the retry
-        adapter reports an exhausted read timeout as a ``ConnectionError``
-        whose message says "Read timed out").
+        When the server does not answer within ``timeout``.
     DownloadError
         When the body is an HTML page instead of the file, or shorter than
         the advertised ``Content-Length``.
 
     """
-    output_path = Path(output_path)
-    part_path = output_path.with_name(output_path.name + PART_SUFFIX)
-    if session is None:
-        session = create_session()
+    from geepers.gps_sources._download import DownloadError as _GeepersError
+    from geepers.gps_sources._download import download_file as _download
 
     try:
-        with session.get(url, stream=True, timeout=timeout) as response:
-            response.raise_for_status()
-            content_type = response.headers.get("Content-Type", "")
-            if "text/html" in content_type.lower():
-                msg = f"{url} returned an HTML page ({content_type}), not a data file"
-                raise DownloadError(msg)
-
-            expected = _expected_length(response)
-            received = 0
-            with open(part_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-                    if received == 0 and _looks_like_html(chunk):
-                        msg = f"{url} returned an HTML page, not a data file"
-                        raise DownloadError(msg)
-                    f.write(chunk)
-                    received += len(chunk)
-
-        if expected is not None and received != expected:
-            msg = (
-                f"{url}: received {received} bytes but Content-Length is"
-                f" {expected}; discarding the partial file"
-            )
-            raise DownloadError(msg)
-    except BaseException:
-        part_path.unlink(missing_ok=True)
-        raise
-
-    part_path.replace(output_path)
-    return output_path
-
-
-def _expected_length(response: requests.Response) -> int | None:
-    """``Content-Length`` of a response whose body is not transfer-encoded."""
-    if response.headers.get("Content-Encoding"):
-        # iter_content yields decoded bytes; the header counts encoded ones
-        return None
-    value = response.headers.get("Content-Length")
-    try:
-        return int(value) if value is not None else None
-    except ValueError:
-        return None
+        return _download(
+            url,
+            Path(output_path),
+            session=session if session is not None else create_session(),
+            timeout=timeout,
+        )
+    except _GeepersError as exc:
+        raise DownloadError(str(exc)) from exc
 
 
 def _is_staged(output_path: Path) -> bool:

@@ -102,7 +102,7 @@ def disp_s1(
     "-o",
     type=click.Path(file_okay=False, path_type=Path),
     required=True,
-    help="Directory to save downloaded UNR parquet file.",
+    help="Directory for the grid lookup table and the per-node .tenv8 files.",
 )
 @click.option(
     "--margin",
@@ -132,9 +132,10 @@ def unr(
     r"""Download UNR GPS timeseries data for a DISP-S1 frame.
 
     Downloads GPS timeseries grid from the Nevada Geodetic Laboratory (UNR)
-    within the frame's bounding box (expanded by margin). Data is saved
-    as a parquet file for efficient loading. Output directory is created
-    if it doesn't exist.
+    within the frame's bounding box (expanded by margin): the grid lookup
+    table and one ``<id>_<frame>_<grid_type>.tenv8`` file per grid node, the
+    layout `unr_timeseries_dir` expects. Output directory is created if it
+    doesn't exist.
 
     Examples
     --------
