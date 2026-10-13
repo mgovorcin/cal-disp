@@ -991,3 +991,82 @@ def test_gnss_buffer_reaches_the_sampler_on_the_loclin_route(
         assert seen[0].buffer_meters == 20000.0
         with xr.open_dataset(out) as ds:
             assert np.isfinite(ds["calibration"].values).mean() > 0.9
+
+
+def test_loclin_remove_restore_reads_the_venti_databases(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+):
+    """v0.5: areas always excluded, events only for pairs that span them,
+    from the Venti GeoJSON (id/name/version, t0) on the product grid."""
+    import json
+
+    from pyproj import Transformer
+
+    to_ll = Transformer.from_crs("EPSG:32611", "EPSG:4326", always_xy=True)
+
+    def box(x0, x1, y0, y1):
+        ring = [
+            to_ll.transform(x, y)
+            for x, y in [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
+        ]
+        return {"type": "Polygon", "coordinates": [ring]}
+
+    # product grid: x 405000-424900, y 3778000 down to 3758100 (100 m)
+    areas = {
+        "type": "FeatureCollection",
+        "version": "t-1",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"id": "west", "name": "west half"},
+                "geometry": box(404000, 414950, 3757000, 3779000),
+            }
+        ],
+    }
+    events = {
+        "type": "FeatureCollection",
+        "version": "t-1",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"id": "in_pair", "t0": "2022-03-01"},
+                "geometry": box(415050, 420000, 3757000, 3779000),
+            },
+            {
+                "type": "Feature",
+                "properties": {"id": "later", "t0": "2023-03-01"},
+                "geometry": box(420050, 426000, 3757000, 3779000),
+            },
+        ],
+    }
+    (tmp_path / "areas.geojson").write_text(json.dumps(areas))
+    (tmp_path / "events.geojson").write_text(json.dumps(events))
+    lookup_file, tenv8_dir = sample_unr_data
+    params = AlgorithmParameters.create_default().with_overrides(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": False,
+                "downsample_factor": 2,
+                "surface": {"method": "loclin", "cutoff_wavelength_meters": 5000.0},
+            }
+        }
+    )
+    run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "out",
+        los_file=sample_static_los,
+        algorithm_parameters=params,
+        defo_area_db_json=tmp_path / "areas.geojson",
+        event_db_json=tmp_path / "events.geojson",
+    )
+    (call,) = captured_core
+    exclude = call["exclude_mask"]
+    assert exclude[:, :95].all()  # the area, always
+    assert exclude[:, 102:148].all()  # the event inside the pair
+    assert not exclude[:, 153:].any()  # the later event does not apply
