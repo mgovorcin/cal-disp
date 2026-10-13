@@ -540,6 +540,7 @@ class CalProduct:
         product_landing_page_doi: str | None = None,
         product_specification_document_id: str | None = None,
         pge_runconfig: str | None = None,
+        gnss_provenance_json: str | None = None,
     ) -> None:
         """Add metadata group to existing product.
 
@@ -575,6 +576,8 @@ class CalProduct:
             Product spec document ID.
         pge_runconfig : str or None, optional
             PGE runconfig YAML content.
+        gnss_provenance_json : str or None, optional
+            GNSS provenance record (JSON), written as ``gnss_provenance`` when given.
 
         Raises
         ------
@@ -611,6 +614,7 @@ class CalProduct:
             product_landing_page_doi=product_landing_page_doi,
             product_specification_document_id=product_specification_document_id,
             pge_runconfig=pge_runconfig,
+            gnss_provenance_json=gnss_provenance_json,
         )
         ds_meta.to_netcdf(
             self.path,

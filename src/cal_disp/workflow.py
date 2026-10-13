@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import importlib.metadata
 import inspect
+import json
 import logging
 from datetime import datetime, timezone
 from io import StringIO
@@ -803,6 +804,7 @@ def run_calibration(
     ref_decimal = _date_to_decimal_year(disp_product.reference_date)
     sec_decimal = _date_to_decimal_year(disp_product.secondary_date)
     v_opts = cal.to_venti()
+    gnss_provenance = None  # the gamma route has no provenance record
     if v_opts.surface.method == "loclin" and cal.grid_type == "constant":
         # v0.5: the single sampling path with the grid buffer (R-G2, R-G5)
         gnss_los, gnss_los_std, gnss_provenance = _gnss_los_fields_enu(
@@ -1201,6 +1203,11 @@ def run_calibration(
         ceos_ionospheric_phase_correction="none",
         ceos_noise_removal="N",
         pge_runconfig=pge_runconfig,
+        gnss_provenance_json=(
+            json.dumps(gnss_provenance.as_dict())
+            if gnss_provenance is not None
+            else None
+        ),
     )
 
     cal_product.add_auxiliary(
