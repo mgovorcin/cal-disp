@@ -258,3 +258,25 @@ def test_download_grid_file(tmp_path: Path, grid_type, remote_dir):
 def test_constant_grid_unavailable(tmp_path: Path):
     with pytest.raises(ValueError, match="constant grid only"):
         download_grid_file(12, tmp_path, version="0.2", grid_type="constant")
+
+
+def test_download_delegates_to_geepers_and_maps_its_error(tmp_path: Path, monkeypatch):
+    """T26.2: one downloader (geepers'); its error becomes cal-disp's
+    DownloadError, which the CLI maps to an exit code."""
+    import geepers.gps_sources._download as gd
+
+    calls = []
+
+    def fake(url, output_path, *, session, timeout):
+        calls.append((url, output_path, session, timeout))
+        if "bad" in url:
+            raise gd.DownloadError("bad body")
+        return output_path
+
+    monkeypatch.setattr(gd, "download_file", fake)
+    out = tmp_path / "x.tenv8"
+    session = MagicMock()
+    assert download_file("https://example.invalid/ok", out, session=session) == out
+    assert calls[0][:3] == ("https://example.invalid/ok", out, session)
+    with pytest.raises(_stage_unr.DownloadError, match="bad body"):
+        download_file("https://example.invalid/bad", out, session=session)
