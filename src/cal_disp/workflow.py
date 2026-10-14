@@ -20,8 +20,8 @@ from typing import Any
 import numpy as np
 import rasterio
 import xarray as xr
-
 from cal_disp._version import __version__
+
 from cal_disp.config._algorithm import AlgorithmParameters
 from cal_disp.product import CalProduct, DispProduct
 
@@ -996,6 +996,21 @@ def run_calibration(
             cal.posting_meters,
             pair=disp_file.name,
         )
+    # a frame's packaged stable-pixel mask (Venti surface.fit_mask, frame
+    # table): unstable pixels leave the fit but keep the surface
+    fit_mask = None
+    if venti_options.surface.fit_mask is not None:
+        from venti.frames import fit_mask_path
+
+        fit_mask = _read_external_mask(
+            fit_mask_path(venti_options.surface.fit_mask), x, y
+        )
+        logger.info(
+            "fit_mask %s: %d of %d pixels outside it are left out of the fit",
+            venti_options.surface.fit_mask,
+            int((~fit_mask & mask).sum()),
+            int(mask.sum()),
+        )
     try:
         result = calibrate_pair(
             disp_2d,
@@ -1010,6 +1025,7 @@ def run_calibration(
             tropo=tropo_component,
             set_correction=set_component,
             exclude_mask=~event_mask if event_mask is not None else None,
+            fit_mask=fit_mask,
             n_jobs=threads_per_worker,
             unwrap_hook=unwrap_hook,
             # the product carries calibration and sigma_CAL only
