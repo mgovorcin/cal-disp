@@ -639,6 +639,71 @@ def test_mask_file_pixels_are_invalid_for_the_fit(
     np.testing.assert_array_equal(masked["mask"][outside], plain["mask"][outside])
 
 
+def test_frame_fit_mask_is_read_from_the_package_and_passed_to_the_fit(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+    captured_core,
+    monkeypatch,
+):
+    """surface.fit_mask (frame table) names a packaged mask: it reaches
+    calibrate_pair as fit_mask, and the valid mask itself is unchanged."""
+    import venti.frames
+
+    _calibrate(tmp_path / "a", sample_disp_product, sample_static_los, sample_unr_data)
+    (plain,) = captured_core
+    captured_core.clear()
+    assert plain["fit_mask"] is None
+    values = np.ones(plain["mask"].shape, dtype=np.uint8)
+    values[50:80, 60:120] = 0
+    masks = tmp_path / "fit_masks"
+    masks.mkdir()
+    _write_mask_like(sample_disp_product, masks / "F00000_stable.tif", values)
+    monkeypatch.setattr(venti.frames, "FIT_MASK_DIR", masks)
+    lookup_file, tenv8_dir = sample_unr_data
+    run_calibration(
+        disp_file=sample_disp_product,
+        unr_grid_latlon_file=lookup_file,
+        unr_timeseries_dir=tenv8_dir,
+        output_dir=tmp_path / "b",
+        los_file=sample_static_los,
+        algorithm_parameters=AlgorithmParameters(
+            calibration_options=CalibrationOptions(
+                apply_solid_earth_tide_correction=False,
+                surface={"fit_mask": "F00000_stable.tif"},
+            )
+        ),
+    )
+    (fitted,) = captured_core
+    np.testing.assert_array_equal(fitted["fit_mask"], values == 1)
+    np.testing.assert_array_equal(fitted["mask"], plain["mask"])
+
+
+@pytest.mark.usefixtures("captured_core")
+def test_unknown_fit_mask_name_fails_before_the_fit(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+):
+    lookup_file, tenv8_dir = sample_unr_data
+    with pytest.raises(FileNotFoundError, match="no packaged fit mask"):
+        run_calibration(
+            disp_file=sample_disp_product,
+            unr_grid_latlon_file=lookup_file,
+            unr_timeseries_dir=tenv8_dir,
+            output_dir=tmp_path / "out",
+            los_file=sample_static_los,
+            algorithm_parameters=AlgorithmParameters(
+                calibration_options=CalibrationOptions(
+                    apply_solid_earth_tide_correction=False,
+                    surface={"fit_mask": "F00000_missing.tif"},
+                )
+            ),
+        )
+
+
 @pytest.mark.usefixtures("captured_core")  # Venti stubbed: the error comes first
 @pytest.mark.parametrize(
     ("problem", "match"),
