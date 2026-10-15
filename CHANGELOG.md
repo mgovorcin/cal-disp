@@ -58,13 +58,12 @@ run them:
 | `auxiliary/*` | 0 | 0 | 0 | unchanged |
 
 ### Open before the release
-- **`calibration_std` is NaN where the fit coverage is low.** Venti
-  `fit_sigma` returns NaN below a kernel coverage of 1e-3, and the coherence⁸
-  weights leave little coverage on decorrelated land. On T46 products σ_CAL is
-  NaN on 5–18% of land (Central Valley, Montana), 42–65% (Houston, New York),
-  ~60% (Hawaii) and 85–89% (Puerto Rico). The gate and TS-E4 use station pixels
-  (coherent), so they did not see it. Needs a decision: an extrapolated,
-  inflated σ there, or NaN documented as "no estimate".
+- ~~`calibration_std` NaN where the fit coverage is low~~ **decided
+  2026-10-14:** σ_CAL follows the calibration (`uncertainty.extrapolate_sigma`
+  in the v0.5 set; Venti #38): the nearest fitted value, inflated up to 3× with
+  the distance, where the fit had too little weight. Golden pair: NaN masks of
+  `calibration` and `calibration_std` equal, calibration and existing σ
+  unchanged. To refine later (Venti todo).
 - Per-frame `uncertainty.k_grid` (TS-G1) and tropo modes reach runs only
   through the frame table; the T46 runs did not pass it (k_grid 3.9 everywhere).
 - Frame-table `frame.plate` is recorded but not used by any calibration step.

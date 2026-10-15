@@ -6,7 +6,7 @@ changes what a run produces, so they happen together, after the VnV sign-off
 
 ## 0. Before you start
 - [ ] VnV report signed off (disp2vlm_validation `docs/vnv/v0.5-calval-report.md`).
-- [ ] Decision on `calibration_std` NaN where the fit coverage is low
+- [x] Decision on `calibration_std` NaN where the fit coverage is low (2026-10-14: extrapolated σ, `uncertainty.extrapolate_sigma`)
       (CHANGELOG, "Open before the release").
 - [ ] Frame-key fix merged (#16), so the frame table reaches runs.
 
