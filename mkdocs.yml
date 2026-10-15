@@ -46,6 +46,7 @@ nav:
       - Environment provenance: notebooks/12_environment_provenance.ipynb
       - Download robustness: notebooks/13_download_robustness.ipynb
   - Development: development.md
+  - Releasing v0.5: release_v0.5.md
   - API Reference: api.md
 
 # Plugins
