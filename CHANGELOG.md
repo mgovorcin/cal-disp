@@ -8,9 +8,15 @@ Product-affecting entries are marked **[product]**. Numbers on the golden pair
 v0.5 replaces the gamma windowed-plane surface with Venti's local-linear
 surface and adds remove-restore, the 50 km GNSS buffer, per-frame settings and
 σ_CAL. Validated on 10 benchmark frames (T46: all PASS under decisions 0002 and
-0003; disp2vlm_validation `docs/vnv/v0.5-calval-report.md`). **The defaults are
-not switched yet**: T49.1 flips `configs/algorithm_parameters.yaml` to
-`configs/algorithm_parameters_v05.yaml` after VnV sign-off (T50).
+0003; disp2vlm_validation `docs/vnv/v0.5-calval-report.md`), confirmed on all
+10 frames with the release candidate through the frame table (2026-10-15).
+VnV signed off by the owner 2026-10-15.
+
+**The defaults are now v0.5 (T49.1).** `configs/algorithm_parameters.yaml` and
+the model defaults are the v0.5 set. A parameter file that leaves out the
+schema-v2 groups (`surface`, `weights`, `gnss`, `uncertainty`), as every 0.3
+file does, now runs v0.5 for them: to reproduce gamma use
+`configs/algorithm_parameters_gamma.yaml`, which spells them out.
 
 ### Added
 - `configs/algorithm_parameters_v05.yaml` (the T46 set) and

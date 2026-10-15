@@ -5,21 +5,21 @@ changes what a run produces, so they happen together, after the VnV sign-off
 (T50.3), in this order.
 
 ## 0. Before you start
-- [ ] VnV report signed off (disp2vlm_validation `docs/vnv/v0.5-calval-report.md`).
+- [x] VnV report signed off (owner 2026-10-15; OPERA CalVal pending) (disp2vlm_validation `docs/vnv/v0.5-calval-report.md`).
 - [x] Decision on `calibration_std` NaN where the fit coverage is low (2026-10-14: extrapolated σ, `uncertainty.extrapolate_sigma`)
       (CHANGELOG, "Open before the release").
-- [ ] Frame-key fix merged (#16), so the frame table reaches runs.
+- [x] Frame-key fix merged (#16), so the frame table reaches runs.
 
 ## 1. Flip the defaults (T49.1)
-- [ ] `cp configs/algorithm_parameters_v05.yaml configs/algorithm_parameters.yaml`
+- [x] `cp configs/algorithm_parameters_v05.yaml configs/algorithm_parameters.yaml`
       (keep the field documentation; only the values change).
-- [ ] Model defaults in `src/cal_disp/config/_algorithm.py` follow the file.
-- [ ] `scripts/build_golden_output.sh` writes the v0.5 parameters and adds the
+- [x] Model defaults in `src/cal_disp/config/_algorithm.py` follow the file.
+- [x] `scripts/build_golden_output.sh` writes the v0.5 parameters and adds the
       static ancillaries production uses:
       `algorithm_parameters_overrides_json` (Venti
       `load_frame_table().write(path, materialize=True)`), `defo_area_db_json`
       and `event_db_json` (Venti `data/`).
-- [ ] `tests/test_release_configs.py`: the gamma test reads its own copy of the
+- [x] `tests/test_release_configs.py`: the gamma test reads its own copy of the
       0.3 parameters (the build script now writes v0.5).
 
 ## 2. Image (T49.2)
