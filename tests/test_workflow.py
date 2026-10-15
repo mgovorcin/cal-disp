@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import rasterio
 import xarray as xr
+from _gamma import gamma_parameters
 
 from cal_disp.config._algorithm import AlgorithmParameters, CalibrationOptions
 from cal_disp.workflow import run_calibration
@@ -43,8 +44,8 @@ def test_run_calibration_offline(
         unr_timeseries_dir=tenv8_dir,
         output_dir=output_dir,
         los_file=sample_static_los,
-        algorithm_parameters=AlgorithmParameters(
-            calibration_options=CalibrationOptions(grid_type=grid_type)
+        algorithm_parameters=gamma_parameters(
+            {"calibration_options": {"grid_type": grid_type}}
         ),
     )
 
@@ -162,12 +163,16 @@ def test_run_calibration_venti_core_inputs(
     apply_set: bool,
 ):
     lookup_file, tenv8_dir = sample_unr_data
-    options = CalibrationOptions(
-        apply_solid_earth_tide_correction=apply_set,
-        downsample_factor=2,
-        downsample_weighted=True,
-        event_mask_buffer_pixels=2,
-    )
+    options = gamma_parameters(
+        {
+            "calibration_options": {
+                "apply_solid_earth_tide_correction": apply_set,
+                "downsample_factor": 2,
+                "downsample_weighted": True,
+                "event_mask_buffer_pixels": 2,
+            }
+        }
+    ).calibration_options
 
     out_path = run_calibration(
         disp_file=sample_disp_product_with_corrections,
@@ -208,7 +213,7 @@ def test_run_calibration_venti_core_inputs(
     assert call["options"].downsample_factor == 2
     assert call["options"].downsample_weighted
     np.testing.assert_allclose(call["coherence"], coherence, rtol=1e-6)
-    assert call["options"].surface.method == "windowed_plane"  # gamma default
+    assert call["options"].surface.method == "windowed_plane"  # gamma
 
     with xr.open_dataset(out_path) as ds:
         applied = ds["calibration"].attrs["corrections_applied"]
@@ -438,6 +443,7 @@ def test_run_calibration_clips_negative_std(
         unr_timeseries_dir=tenv8_dir,
         output_dir=tmp_path / "out",
         los_file=sample_static_los,
+        algorithm_parameters=gamma_parameters(),  # the gamma route's RBF sigma
     )
 
     with xr.open_dataset(out_path) as ds:
@@ -909,7 +915,10 @@ def test_gnss_provenance_written_on_v05_route_only(
     assert record is not None
     assert set(PROVENANCE_KEYS) <= set(record)
     assert record["grid_type"] == "constant" and len(record["digest"]) == 64
-    assert read_cal_provenance(run({}, "gamma")) is None
+    assert (
+        read_cal_provenance(run({"surface": {"method": "windowed_plane"}}, "gamma"))
+        is None
+    )
 
 
 def test_algorithm_options_reach_venti():
@@ -932,7 +941,7 @@ def test_algorithm_options_reach_venti():
     assert venti.tropo.mode == "auto"
     assert venti.uncertainty.k_grid == 3.9
     default = AlgorithmParameters.create_default().calibration_options.to_venti()
-    assert default.surface.method == "windowed_plane"  # gamma reproduced by default
+    assert default.surface.method == "loclin"  # v0.5 by default since T49
     assert default.tropo.mode == "legacy"
 
 
@@ -1159,6 +1168,9 @@ def test_loclin_remove_restore_reads_the_venti_databases(
                 "apply_solid_earth_tide_correction": False,
                 "downsample_factor": 2,
                 "surface": {"method": "loclin", "cutoff_wavelength_meters": 5000.0},
+                # the fixture has four grid nodes: excluding those in the area
+                # leaves too few to re-interpolate from (the v0.5 default)
+                "gnss": {"exclude_defo_nodes": False, "reinterpolate_excluded": False},
             }
         }
     )

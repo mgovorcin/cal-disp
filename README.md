@@ -225,17 +225,25 @@ delivery, build it inside the delivered image (see the script header).
 
 ## Algorithm Parameters
 
-Key parameters in `configs/algorithm_parameters.yaml`:
+Key parameters in `configs/algorithm_parameters.yaml` (the v0.5 defaults since
+plan T49; `configs/algorithm_parameters_gamma.yaml` reproduces gamma 0.3):
 
 | Parameter | Default | Description |
 |---|---|---|
 | `grid_type` | `constant` | GNSS model type: `constant` (velocity field) or `variable` (epoch-specific) |
 | `reference_frame` | `IGS20` | GNSS reference frame: `IGS20` or `IGS14` |
-| `window_size_meters` | `30000.0` | Side length of the moving window for plane fitting (metres) |
-| `posting_meters` | `30.0` | DISP pixel spacing (30 m for DISP-S1) |
+| `surface.method` | `loclin` | Calibration surface: `loclin` (v0.5 local-linear kernel) or `windowed_plane` (gamma) |
+| `surface.cutoff_wavelength_meters` | `50000.0` | Half-response wavelength: longer signal comes from GNSS, shorter stays InSAR |
+| `weights.coherence_power` | `8.0` | Fit weights: temporal coherence to this power (with robust weights) |
+| `gnss.buffer_meters` | `50000.0` | GNSS grid nodes up to this far outside the frame constrain its edges |
+| `uncertainty.extrapolate_sigma` | `true` | `calibration_std` wherever `calibration` has a value |
 | `downsample_factor` | `6` | Integer downsampling before surface fitting (1 = disabled) |
-| `calibration_surface_smoothing_method` | `gaussian` | Smoothing filter: `gaussian`, `gaussian_fft`, `hanning_fft`, `savitzky_golay` |
-| `unwrap_error_correction` | `false` | Venti region-offset unwrap-error correction (off: its mask-island segmentation quantises real signal into λ/2 steps) |
+| `unwrap_error_correction` | `false` | Venti region-offset unwrap-error correction (off until a trade study confirms it) |
+
+Per-frame settings (tropo mode, island regions, fit masks, `k_grid`) come from
+the Venti frame table, passed as the runconfig's
+`algorithm_parameters_overrides_json`; remove-restore needs `defo_area_db_json`
+and `event_db_json`.
 
 ---
 

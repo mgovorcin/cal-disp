@@ -20,8 +20,8 @@ from typing import Any
 import numpy as np
 import rasterio
 import xarray as xr
-from cal_disp._version import __version__
 
+from cal_disp._version import __version__
 from cal_disp.config._algorithm import AlgorithmParameters
 from cal_disp.product import CalProduct, DispProduct
 
@@ -154,10 +154,10 @@ def _remove_restore_valid(
     """
     if defo_area_db_json is None and event_db_json is None:
         return None
+    import shapely
     from pyproj import Transformer
     from rasterio.features import rasterize
     from rasterio.transform import from_origin
-    from shapely.ops import transform as shp_transform
     from venti.calibration.remove_restore import load_area_db, load_event_db
 
     shapes = []
@@ -180,10 +180,15 @@ def _remove_restore_valid(
     if not shapes:
         return np.ones(shape, dtype=bool)
     to_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
+
+    def _to_utm(lonlat: np.ndarray) -> np.ndarray:
+        # shapely.transform hands over an (N, 2) coordinate array
+        return np.column_stack(to_utm.transform(lonlat[:, 0], lonlat[:, 1]))
+
     dx, dy = float(x[1] - x[0]), float(y[0] - y[1])
     transform = from_origin(x[0] - dx / 2, y[0] + dy / 2, dx, dy)
     inside = rasterize(
-        [(shp_transform(to_utm.transform, g), 1) for g in shapes],
+        [(shapely.transform(g, _to_utm), 1) for g in shapes],
         out_shape=shape,
         transform=transform,
         fill=0,

@@ -460,7 +460,7 @@ def test_algorithm_parameter_changes_still_fail(
     params = AlgorithmParameters().with_overrides(
         {
             "calibration_options": {
-                "surface": {"method": "loclin"},
+                "surface": {"method": "windowed_plane"},  # v0.5 is the default
                 "window_size_meters": 1000.0,
             }
         }

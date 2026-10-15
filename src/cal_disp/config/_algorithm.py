@@ -146,7 +146,7 @@ class CalibrationOptions(YamlModel):
     )
 
     apply_tropo_correction: bool = Field(
-        default=True,
+        default=False,
         description=(
             "Apply the tropospheric correction when the runconfig lists tropo "
             "files (removed before the fit and added back to the surface). "
@@ -164,7 +164,7 @@ class CalibrationOptions(YamlModel):
     )
 
     window_size_meters: float = Field(
-        default=30000.0,
+        default=600000.0,
         gt=0,
         description=(
             "Side length of the moving window used for polynomial plane fitting, "
@@ -259,7 +259,7 @@ class CalibrationOptions(YamlModel):
     )
 
     calibration_surface_smoothing_sigma: Optional[float] = Field(
-        default=None,
+        default=0.0,
         ge=0,
         description=(
             "Sigma (pixels) for gaussian and FFT smoothing methods.  "
@@ -276,18 +276,25 @@ class CalibrationOptions(YamlModel):
         ),
     )
 
-    # Venti algorithm_parameters schema v2 (Venti plan T19, T37.1). The
-    # defaults reproduce the gamma algorithm; the v0.5 algorithm is switched
-    # on here (e.g. surface.method: loclin), per frame through the overrides.
+    # Venti algorithm_parameters schema v2 (Venti plan T19, T37.1). Since v0.5
+    # (plan T49) the defaults are the v0.5 algorithm validated in T46 and the
+    # confirmation run (configs/algorithm_parameters_v05.yaml); gamma is
+    # reproduced with configs/algorithm_parameters_gamma.yaml. Per-frame
+    # settings come from the frame table (algorithm_parameters_overrides_json).
     surface: SurfaceOptions = Field(
-        default_factory=SurfaceOptions,
+        default_factory=lambda: SurfaceOptions(
+            method="loclin",
+            cutoff_wavelength_meters=50000.0,
+            fill_gaps=True,
+            two_pass=True,
+        ),
         description=(
             "Calibration surface estimator: 'windowed_plane' (gamma) or 'loclin'"
             " (local-linear kernel with a half-response cutoff, two passes)."
         ),
     )
     weights: WeightOptions = Field(
-        default_factory=WeightOptions,
+        default_factory=lambda: WeightOptions(coherence_power=8.0, robust=True),
         description="Fit weights of the loclin surface (coherence power, robust).",
     )
     tropo: TropoOptions = Field(
@@ -299,11 +306,13 @@ class CalibrationOptions(YamlModel):
         ),
     )
     gnss: GnssOptions = Field(
-        default_factory=GnssOptions,
+        default_factory=lambda: GnssOptions(
+            buffer_meters=50000.0, exclude_defo_nodes=True, reinterpolate_excluded=True
+        ),
         description="GNSS grid handling (buffer, defo-node exclusion).",
     )
     uncertainty: UncertaintyOptions = Field(
-        default_factory=UncertaintyOptions,
+        default_factory=lambda: UncertaintyOptions(k_grid=3.9, extrapolate_sigma=True),
         description="calibration_std model of the loclin surface (sigma_CAL).",
     )
     unwrap: UnwrapOptions = Field(

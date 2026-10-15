@@ -24,3 +24,30 @@ calibration_options:
   savitzky_golay:
     window_length: 51
     polyorder: 3
+  # Since v0.5 the defaults are the v0.5 algorithm: gamma pins the schema-v2
+  # groups to the values that reproduce it (the 0.3 golden relied on the old
+  # defaults for these).
+  surface:
+    method: windowed_plane
+    cutoff_wavelength_meters: 50000.0
+    fill_gaps: false
+    two_pass: false
+    regions: none
+    region_min_pixels: 50
+    fit_mask: null
+  weights:
+    coherence_power: 0.0
+    robust: false
+    filled_pixel_weight: 0.02
+  gnss:
+    buffer_meters: 0.0
+    exclude_defo_nodes: false
+    reinterpolate_excluded: false
+    reprocessing: false
+    snapshot_id: null
+  uncertainty:
+    k_grid: 1.0
+    inflate_inside_areas: true
+    extrapolate_sigma: false
+    sigma_nonsecular_meters: 0.0
+    sigma_disp_placeholder_mm: 10.0

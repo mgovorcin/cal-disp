@@ -3,14 +3,20 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.0] — unreleased (draft, Venti plan T49)
+## [0.5.0] — release candidate `0.5.0rc1`, 2026-10-15 (Venti plan T49)
 
 v0.5 replaces the gamma windowed-plane surface with Venti's local-linear
 surface and adds remove-restore, the 50 km GNSS buffer, per-frame settings and
 σ_CAL. Validated on 10 benchmark frames (T46: all PASS under decisions 0002 and
-0003; disp2vlm_validation `docs/vnv/v0.5-calval-report.md`). **The defaults are
-not switched yet**: T49.1 flips `configs/algorithm_parameters.yaml` to
-`configs/algorithm_parameters_v05.yaml` after VnV sign-off (T50).
+0003; disp2vlm_validation `docs/vnv/v0.5-calval-report.md`), confirmed on all
+10 frames with the release candidate through the frame table (2026-10-15).
+VnV signed off by the owner 2026-10-15.
+
+**The defaults are now v0.5 (T49.1).** `configs/algorithm_parameters.yaml` and
+the model defaults are the v0.5 set. A parameter file that leaves out the
+schema-v2 groups (`surface`, `weights`, `gnss`, `uncertainty`), as every 0.3
+file does, now runs v0.5 for them: to reproduce gamma use
+`configs/algorithm_parameters_gamma.yaml`, which spells them out.
 
 ### Added
 - `configs/algorithm_parameters_v05.yaml` (the T46 set) and
@@ -36,6 +42,12 @@ not switched yet**: T49.1 flips `configs/algorithm_parameters.yaml` to
   covers (#9).
 
 ### Changed
+- **[product]** The defaults are v0.5 (T49.1); the golden is v0.5 (T49.3,
+  `docs/golden/MANIFEST_0.5.0.sha256`; 0.3 archived in `test_golden/archive/`).
+- The image no longer installs the `download` extra (it brought dask and zarr,
+  forbidden by `budget.yaml`); stage inputs from a separate install.
+- `scripts/run_validation.sh` passes the golden's static ancillaries (frame
+  table, area and event databases) when it has them.
 - Venti pinned to the mgovorcin/venti-dev v0.5 stack (#3, #14, #15).
 - Core install drops `opera-utils[disp]`; dependency and memory budget in
   `budget.yaml` (#5); peak memory v0.5 7.27 → 4.1 GB, gamma 6.0 → 3.8 GB (#8).
@@ -46,7 +58,7 @@ not switched yet**: T49.1 flips `configs/algorithm_parameters.yaml` to
 - Frame-table overrides: Venti's zero-padded frame keys (`"08882"`) are found;
   before, no frame-table setting reached a run (#16).
 
-### Golden pair: v0.5 vs 0.3 (measured 2026-10-14 outside Docker; T49.3 re-measures in the image)
+### Golden pair: v0.5 vs 0.3 (the v0.5 golden, built and validated in `cal-disp:0.5.0-rc`)
 
 v0.5 parameters + Venti frame table + area/event databases, as production will
 run them:
@@ -54,8 +66,12 @@ run them:
 | layer | median \|Δ\| | p99 \|Δ\| | max \|Δ\| | NaN share |
 |---|---|---|---|---|
 | `calibration` | 12.2 mm | 56.3 mm | 112.6 mm | 33.9% (water; unchanged) |
-| `calibration_std` | 0.46 mm | 2.9 mm | 3.8 mm | 0% → 63.8% (see open issue) |
-| `auxiliary/*` | 0 | 0 | 0 | unchanged |
+| `calibration_std` | 0.49 mm | 5.7 mm | 15.2 mm | 0% → 33.9%: NaN exactly where `calibration` is |
+| `auxiliary/*` | 0 | 0 | 0 | identical |
+
+The gamma file still reproduces the 0.3 golden in the image: every data layer
+matches at 1e-6. Only the recorded parameter list differs, because the 0.3
+record lacks the schema-v2 groups and is now read with v0.5 defaults.
 
 ### Open before the release
 - ~~`calibration_std` NaN where the fit coverage is low~~ **decided
