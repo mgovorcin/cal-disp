@@ -95,3 +95,6 @@ temp/
 !LICENSE.txt
 !environment.yml
 !docs/notebooks/
+
+# mkdocs-jupyter's render cache (rewritten by every docs build)
+.cache/
