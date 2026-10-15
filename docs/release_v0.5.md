@@ -38,4 +38,5 @@ changes what a run produces, so they happen together, after the VnV sign-off
 - [x] Date the `[0.5.0]` entry.
 
 ## 5. Release (T51)
-- [ ] Tag `v0.5.0` on the merge commit; push the image.
+- [x] Tag `v0.5.0` on the merge commit (`438b84e`, 2026-10-15); image `cal-disp:0.5.0` built from the tag and validated against the golden.
+- [ ] Push the image to the registry (owner).

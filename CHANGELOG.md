@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.0] — release candidate `0.5.0rc1`, 2026-10-15 (Venti plan T49)
+## [0.5.0] — 2026-10-15 (Venti plan T49–T51; tag `v0.5.0` on `438b84e`)
 
 v0.5 replaces the gamma windowed-plane surface with Venti's local-linear
 surface and adds remove-restore, the 50 km GNSS buffer, per-frame settings and
