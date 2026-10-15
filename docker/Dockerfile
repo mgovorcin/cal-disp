@@ -82,7 +82,10 @@ ARG CAL_DISP_VERSION=0.0.0.dev0+unknown
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CAL_DISP=${CAL_DISP_VERSION}
 RUN eval "$(micromamba shell hook --shell bash)" && \
     micromamba activate cal-disp && \
-    python -m pip install --no-cache-dir "/tmp/cal-disp[download]" && \
+    # no [download] extra: it brings opera-utils[disp] (dask, zarr), which the
+    # operational image must not carry (budget.yaml, Venti R-O6); stage inputs
+    # with a separate `pip install "cal-disp[download]"`
+    python -m pip install --no-cache-dir "/tmp/cal-disp" && \
     rm -rf /tmp/cal-disp && \
     cal-disp --version
 

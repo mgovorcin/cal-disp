@@ -23,19 +23,19 @@ changes what a run produces, so they happen together, after the VnV sign-off
       0.3 parameters (the build script now writes v0.5).
 
 ## 2. Image (T49.2)
-- [ ] `docker build --network=host -t cal-disp:0.5.0-rc -f docker/Dockerfile .`
+- [x] `docker build --network=host -t cal-disp:0.5.0-rc -f docker/Dockerfile .`
       (docker-build skill); the env budget check (`budget.yaml`) passes.
 
 ## 3. Golden (T49.3)
-- [ ] Regenerate inside the image: `scripts/build_golden_output.sh`.
-- [ ] `scripts/run_validation.sh --golden-dir test_golden` passes in the image.
-- [ ] New `MANIFEST.sha256`; archive the 0.3 golden under `test_golden/archive/`.
-- [ ] Gamma reproduction: a run with `configs/algorithm_parameters_gamma.yaml`
+- [x] Regenerate inside the image: `scripts/build_golden_output.sh`.
+- [x] `scripts/run_validation.sh --golden-dir test_golden` passes in the image.
+- [x] New `MANIFEST.sha256`; archive the 0.3 golden under `test_golden/archive/`.
+- [x] Gamma reproduction: a run with `configs/algorithm_parameters_gamma.yaml`
       matches the archived 0.3 golden.
 
 ## 4. Changelog (T49.4)
-- [ ] Re-measure the golden-pair table in the image and update `CHANGELOG.md`.
-- [ ] Date the `[0.5.0]` entry.
+- [x] Re-measure the golden-pair table in the image and update `CHANGELOG.md`.
+- [x] Date the `[0.5.0]` entry.
 
 ## 5. Release (T51)
 - [ ] Tag `v0.5.0` on the merge commit; push the image.

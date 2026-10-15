@@ -96,20 +96,15 @@ docker run --rm -it \
 ```
 
 ### Download Products
-The `download` group has the sub-commands `disp-s1`, `unr`, `tropo` and
-`burst-bounds` (`cal-disp download --help`):
+The operational image does not carry the `download` extra (it brings
+`opera-utils[disp]` with dask and zarr, which `budget.yaml` forbids in the
+image). Stage inputs from a separate install, `pip install "cal-disp[download]"`,
+where the `download` group has the sub-commands `disp-s1`, `unr`, `tropo` and
+`burst-bounds` (`cal-disp download --help`), e.g.:
 ```bash
-docker run --rm -it \
-    --user $(id -u):$(id -g) \
-    -v $PWD:/home/work \
-    opera-adt/cal-disp:latest \
-    cal-disp download unr --frame-id 8882 -o unr_data
-
-docker run --rm -it \
-    --user $(id -u):$(id -g) \
-    -v $PWD:/home/work -v $HOME/.netrc:/home/conda/.netrc:ro \
-    opera-adt/cal-disp:latest \
-    cal-disp download disp-s1 --frame-id 8882 -o disp_data --start 2022-07-01 --end 2022-07-31
+pip install "cal-disp[download]"
+cal-disp download unr --frame-id 8882 -o unr_data
+cal-disp download disp-s1 --frame-id 8882 -o disp_data --start 2022-07-01 --end 2022-07-31
 ```
 
 ## Docker Run Flags
@@ -129,8 +124,9 @@ The Docker image is built in two layers:
 
 1. the conda layer from `docker/conda-lock.txt`, an `@EXPLICIT` lockfile with
    exact package URLs and md5 checksums, generated from `environment.yml`;
-2. `pip install cal-disp[download]` on top, which only adds the pure-Python
-   dependencies (and the pinned Venti commit from `pyproject.toml`).
+2. `pip install cal-disp` on top, which only adds the pure-Python
+   dependencies (and the pinned Venti commit from `pyproject.toml`); no
+   `download` extra, so the image passes `scripts/check_env_budget.py`.
 
 Compiled packages must come from the lockfile, never from PyPI wheels: the
 `netCDF4` wheel bundles its own HDF5, which does not match the HDF5 that
