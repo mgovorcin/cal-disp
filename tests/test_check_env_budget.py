@@ -68,7 +68,7 @@ def test_peak_memory_against_the_budget(budget_mod, tmp_path, capsys):
     )
     assert budget_mod.peak_memory_gb(log.read_text()) == 3.95
     assert budget_mod.main(["--peak-memory-log", str(log)]) == 0
-    log.write_text("Maximum memory usage: 5.10 GB\n")  # above the 4.5 GB budget
+    log.write_text("Maximum memory usage: 6.10 GB\n")  # above the 6 GB budget
     assert budget_mod.main(["--peak-memory-log", str(log)]) == 1
     assert "FAILED" in capsys.readouterr().out
     with pytest.raises(ValueError, match="Maximum memory usage"):
