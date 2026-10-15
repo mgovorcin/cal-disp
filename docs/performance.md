@@ -4,8 +4,9 @@ Full-frame runtime and peak memory of `cal-disp run` on the F08882 golden pair
 (7733 × 9464 pixels, factor-6 fit grid), on aurora (32 cores,
 `NUMPY_MADVISE_HUGEPAGE=0`). Peak memory is the `Maximum memory usage` line
 the run logs; `scripts/check_env_budget.py --peak-memory-log` checks it against
-`peak_memory_gb` in `budget.yaml` (4.5 GB since 2026-10-09; the plan's target is
-4 GB, Venti T47).
+`peak_memory_gb` in `budget.yaml` (6.0 GB since 2026-10-14, owner: the v0.5
+golden run with the frame table, remove-restore, fit mask and extrapolated σ
+peaks at 5.75 GB; 4.5 GB from 2026-10-09; the plan's target was 4 GB, Venti T47).
 
 | Configuration | Venti | fit | whole run | peak |
 |---|---|---|---|---|
