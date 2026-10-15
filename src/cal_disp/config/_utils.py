@@ -139,7 +139,14 @@ def _parse_algorithm_overrides(
 
     with open(overrides_file) as f:
         overrides = json.load(f)
-        # Handle both {"data": {frame_id: ...}} and {frame_id: ...} formats
-        if "data" in overrides:
-            return overrides["data"].get(str(frame_id), {})
-        return overrides.get(str(frame_id), {})
+    # Handle both {"data": {frame_id: ...}} and {frame_id: ...} formats
+    table = overrides["data"] if "data" in overrides else overrides
+    # Venti's frame table keys frames zero-padded to five digits ("08882");
+    # older override files use the bare number ("8882")
+    keys = [k for k in dict.fromkeys((str(int(frame_id)), f"{int(frame_id):05d}"))
+            if k in table]  # fmt: skip
+    if len(keys) > 1:
+        raise ValueError(
+            f"{overrides_file}: frame {frame_id} appears under both keys {keys}"
+        )
+    return table[keys[0]] if keys else {}
