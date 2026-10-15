@@ -46,5 +46,7 @@ def test_v05_file_is_the_t46_benchmark_set():
     # per-frame settings come from the frame table, not this file
     assert cal.surface.regions == "none"
     assert cal.surface.fit_mask is None
+    # owner 2026-10-14: sigma_CAL wherever the calibration has a value
+    assert cal.uncertainty.extrapolate_sigma is True
     # owner 2026-10-09: off until a trade study confirms it
     assert cal.unwrap_error_correction is False

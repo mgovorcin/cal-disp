@@ -1081,7 +1081,14 @@ def run_calibration(
             )
             + f", k = {venti_options.uncertainty.k_grid} for the UNR"
             f" {cal.grid_type} grid and sigma_fit the kernel's standard error,"
-            " grown inside interpolated defo/event areas. It is the uncertainty"
+            " grown inside interpolated defo/event areas"
+            + (
+                " and, where the fit had too little weight, extrapolated from the"
+                " nearest fitted value and grown with the distance"
+                if venti_options.uncertainty.extrapolate_sigma
+                else ""
+            )
+            + ". It is the uncertainty"
             " of the calibration surface (the secular long-wavelength field)."
             " Add the DISP noise below the cutoff"
             + (

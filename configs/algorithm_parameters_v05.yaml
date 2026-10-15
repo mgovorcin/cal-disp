@@ -40,6 +40,9 @@ calibration_options:
   # sigma_CAL is the surface term; k_grid per frame from TS-G1 (frame table), 3.9 otherwise
   uncertainty:
     k_grid: 3.9
+    # sigma_CAL wherever the calibration has a value: nearest fitted value, inflated
+    # with the distance where the fit had too little weight (owner 2026-10-14)
+    extrapolate_sigma: true
   # grid nodes within 50 km outside the frame constrain the edges (R-G2); nodes inside
   # deforming areas are excluded and re-interpolated (remove-restore)
   gnss:
