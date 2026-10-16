@@ -1189,3 +1189,58 @@ def test_loclin_remove_restore_reads_the_venti_databases(
     assert exclude[:, :95].all()  # the area, always
     assert exclude[:, 102:148].all()  # the event inside the pair
     assert not exclude[:, 153:].any()  # the later event does not apply
+
+
+def test_v05_metadata_records_schema_frame_table_and_components(
+    tmp_path: Path,
+    sample_disp_product: Path,
+    sample_static_los: Path,
+    sample_unr_data: tuple[Path, Path],
+):
+    """T37.3 / T27.4: the v0.5 product records the algorithm schema, the
+    frame-parameter table version and the applied components; gamma does not."""
+    import json
+
+    import h5py
+
+    lookup_file, tenv8_dir = sample_unr_data
+
+    def run(params, name, **kw):
+        return run_calibration(
+            disp_file=sample_disp_product,
+            unr_grid_latlon_file=lookup_file,
+            unr_timeseries_dir=tenv8_dir,
+            output_dir=tmp_path / name,
+            los_file=sample_static_los,
+            algorithm_parameters=params,
+            **kw,
+        )
+
+    v05 = run(
+        AlgorithmParameters.create_default().with_overrides(
+            {
+                "calibration_options": {
+                    "apply_solid_earth_tide_correction": False,
+                    "downsample_factor": 2,
+                    "surface": {"cutoff_wavelength_meters": 5000.0},
+                }
+            }
+        ),
+        "v05",
+        frame_parameters_version="0.6-draft",
+    )
+    with h5py.File(v05) as f:
+        meta = f["metadata"]
+        assert int(meta["algorithm_schema_version"][()]) == 2
+        assert meta["frame_parameters_version"][()].decode() == "0.6-draft"
+        comps = json.loads(meta["components_applied"][()])
+    assert comps["cal_gnss_surface"] is True
+    assert comps["cal_set"] is False  # SET off in this run
+    gamma = run(gamma_parameters(), "gamma", frame_parameters_version="0.6-draft")
+    with h5py.File(gamma) as f:
+        for name in (
+            "algorithm_schema_version",
+            "frame_parameters_version",
+            "components_applied",
+        ):
+            assert name not in f["metadata"]  # gamma keeps its 0.3 structure

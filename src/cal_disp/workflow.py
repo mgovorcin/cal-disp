@@ -20,8 +20,8 @@ from typing import Any
 import numpy as np
 import rasterio
 import xarray as xr
-
 from cal_disp._version import __version__
+
 from cal_disp.config._algorithm import AlgorithmParameters
 from cal_disp.product import CalProduct, DispProduct
 
@@ -626,6 +626,7 @@ def run_calibration(
     threads_per_worker: int = 1,
     work_directory: Path | None = None,
     pge_runconfig: str | None = None,
+    frame_parameters_version: str | None = None,
     # Calibration reference metadata
     calibration_reference_name: str = "UNR gridded data",
     calibration_reference_version: str = "0.3",
@@ -680,6 +681,9 @@ def run_calibration(
         Scratch directory, by default ``output_dir / "scratch"``.
     pge_runconfig : str, optional
         Serialised PGE run-config YAML stored in product metadata.
+    frame_parameters_version : str, optional
+        Version of the frame-parameter table applied (the overrides file's
+        top-level ``version``); recorded in ``/metadata`` on the v0.5 route.
     calibration_reference_name : str
         Human-readable name of the calibration reference dataset.
     calibration_reference_version : str
@@ -902,6 +906,8 @@ def run_calibration(
     # the calibration as components (Venti calibrate_pair; calibration ==
     # sum of components)
     venti_options = cal.to_venti()
+    from venti.workflow.config import ALGORITHM_SCHEMA_VERSION
+
     have_tropo_files = bool(reference_tropo_files and secondary_tropo_files)
     dem_2d = None
     if venti_options.tropo.mode in ("auto", "stratified") and have_tropo_files:
@@ -1235,6 +1241,17 @@ def run_calibration(
             json.dumps(gnss_provenance.as_dict())
             if gnss_provenance is not None
             else None
+        ),
+        # v0.5 route only, like gnss_provenance: the gamma product keeps its
+        # 0.3 structure (T37.3)
+        **(
+            {
+                "algorithm_schema_version": ALGORITHM_SCHEMA_VERSION,
+                "frame_parameters_version": frame_parameters_version,
+                "components_applied_json": json.dumps(result.components_applied),
+            }
+            if venti_options.surface.method == "loclin"
+            else {}
         ),
     )
 

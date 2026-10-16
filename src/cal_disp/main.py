@@ -3,13 +3,13 @@ from __future__ import annotations
 from io import StringIO
 from pathlib import Path
 
+from cal_disp._version import __version__
 from threadpoolctl import threadpool_limits
 
 from cal_disp._log import get_max_memory_usage, log_runtime
-from cal_disp._version import __version__
 from cal_disp.browse_image import make_browse_image_from_nc
 from cal_disp.config._algorithm import AlgorithmParameters
-from cal_disp.config._utils import _parse_algorithm_overrides
+from cal_disp.config._utils import _overrides_version, _parse_algorithm_overrides
 from cal_disp.config.workflow import CalibrationWorkflow
 from cal_disp.workflow import run_calibration
 
@@ -71,7 +71,11 @@ def run(
         runconfig.dynamic_ancillary_options.algorithm_parameters_file
     )
     sta = runconfig.static_ancillary_options
+    frame_parameters_version = None
     if sta and sta.algorithm_parameters_overrides_json:
+        frame_parameters_version = _overrides_version(
+            sta.algorithm_parameters_overrides_json
+        )
         frame_id = runconfig.input_options.frame_id
         overrides = _parse_algorithm_overrides(
             sta.algorithm_parameters_overrides_json, frame_id
@@ -141,6 +145,7 @@ def run(
             threads_per_worker=runconfig.worker_settings.threads_per_worker,
             work_directory=runconfig.work_directory,
             pge_runconfig=pge_runconfig,
+            frame_parameters_version=frame_parameters_version,
             calibration_reference_version=runconfig.input_options.unr_grid_version,
             calibration_reference_type=runconfig.input_options.unr_grid_type,
             product_version=runconfig.product_version,
