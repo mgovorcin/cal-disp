@@ -471,3 +471,43 @@ def test_algorithm_parameter_changes_still_fail(
     assert "algorithm_parameters_yaml: parameters differ" in log
     assert "calibration_options.surface.method" in log
     assert "calibration_options.window_size_meters" in log
+
+
+def _set_provenance(product: Path, record: dict) -> None:
+    import json
+
+    with h5py.File(product, "a") as f:
+        if "metadata/gnss_provenance" in f:
+            del f["metadata/gnss_provenance"]
+        f["metadata/gnss_provenance"] = json.dumps(record)
+
+
+_PROVENANCE = {
+    "grid_version": "0.3",
+    "grid_type": "constant",
+    "n_nodes": 106,
+    "field_sha256": "a" * 64,
+    "digest": "b" * 64,
+}
+
+
+def test_provenance_field_hashes_differ_only_warns(
+    reference_product, test_product, caplog
+):
+    """Another environment rounds the GNSS field differently: its exact hashes
+    change, the layers still match; a warning, not a failure."""
+    _set_provenance(reference_product, _PROVENANCE)
+    _set_provenance(
+        test_product, {**_PROVENANCE, "field_sha256": "c" * 64, "digest": "d" * 64}
+    )
+    ok, log = _validate(reference_product, test_product, caplog)
+    assert ok, log
+    assert "field hashes differ" in log
+
+
+def test_provenance_other_fields_still_fail(reference_product, test_product, caplog):
+    _set_provenance(reference_product, _PROVENANCE)
+    _set_provenance(test_product, {**_PROVENANCE, "n_nodes": 105})
+    ok, log = _validate(reference_product, test_product, caplog)
+    assert not ok
+    assert "gnss_provenance: differs at ['n_nodes']" in log

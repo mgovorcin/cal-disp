@@ -7,7 +7,9 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
 
 ## Algorithm
 
-- [ ] **v0.5 golden validates only inside the image.** v0.5 products carry
+- [x] **v0.5 golden validates only inside the image.** *Done 2026-10-15:*
+  `cal-disp validate` compares `gnss_provenance` field by field and only warns
+  on the field hashes; host validation of the v0.5 golden passes. v0.5 products carry
   `/metadata/gnss_provenance`, whose `field_sha256` and `digest` hash the GNSS
   field exactly; `cal-disp validate` compares them exactly, so a run in another
   environment (host pixi env, different numerical builds) fails on metadata
