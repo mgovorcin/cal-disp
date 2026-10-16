@@ -3,6 +3,26 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [0.5.1] — release candidate `0.5.1rc1`, 2026-10-16
+
+### Added
+- **[product]** `/metadata` on the v0.5 route records `algorithm_schema_version`
+  (Venti schema, 2), `frame_parameters_version` (top-level version of the
+  runconfig's frame table, e.g. `0.6-draft`) and `components_applied` (which
+  `cal_*` components are summed into `calibration`, JSON). Venti plan T37.3 and
+  T27.4. The gamma route is unchanged.
+
+### Golden
+Rebuilt in `cal-disp:0.5.1-rc` (`docs/golden/MANIFEST_0.5.1.sha256`). Every data
+layer is bit-identical to 0.5.0; only the three metadata variables are new. The
+0.5.0 golden is archived in `test_golden/archive/golden_v0.5.0_20261015/`.
+
+### Fixed since 0.5.0
+- Venti `35ec67e`: falls back to dropping excluded GNSS nodes when too few
+  remain to re-interpolate (#22).
+- `cal-disp validate` compares `gnss_provenance` field by field; the field
+  hashes only warn, so validation also passes outside the image (#23).
+
 ## [0.5.0] — 2026-10-15 (Venti plan T49–T51; tag `v0.5.0` on `438b84e`)
 
 v0.5 replaces the gamma windowed-plane surface with Venti's local-linear
