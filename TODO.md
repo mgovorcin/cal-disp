@@ -7,6 +7,15 @@ rebuild the golden dataset (`scripts/build_golden_output.sh`) and re-run
 
 ## Algorithm
 
+- [ ] **v0.5 golden validates only inside the image.** v0.5 products carry
+  `/metadata/gnss_provenance`, whose `field_sha256` and `digest` hash the GNSS
+  field exactly; `cal-disp validate` compares them exactly, so a run in another
+  environment (host pixi env, different numerical builds) fails on metadata
+  although every data layer matches at 1e-6. Either compare the provenance
+  without the field hashes (the field is checked through the layers), or keep
+  "validate in the image" as the rule and say so in `run_validation.sh`.
+  Found 2026-10-15 (the 0.3 golden had no provenance record).
+
 - [ ] **Sample UNR grid stations within a 100 km buffer around the frame**
   (*changes the golden*). Today `_setup_gnss_reference`
   (`src/cal_disp/workflow.py`) passes the frame bounds to Venti's
