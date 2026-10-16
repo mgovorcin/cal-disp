@@ -21,6 +21,7 @@ returned, so one run shows everything that is wrong.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass, field
@@ -433,9 +434,53 @@ def _dict_diff(a: dict[str, Any], b: dict[str, Any], prefix: str = "") -> set[st
     return out
 
 
+#: Fields of the GNSS provenance record that hash the sampled field exactly:
+#: they change with the numerical environment (library builds), while the
+#: field itself is compared through the product layers at tolerance.
+_PROVENANCE_FIELD_HASHES = frozenset({"field_sha256", "digest"})
+
+
+def _compare_gnss_provenance(
+    ref_data: np.ndarray,
+    test_data: np.ndarray,
+    group: str,
+    name: str,
+    report: ValidationReport,
+) -> None:
+    """Compare the GNSS provenance record field by field.
+
+    Every field must match (grid version and type, snapshot, lookup hash,
+    node counts, buffer, ...), except the exact hashes of the sampled field
+    (`_PROVENANCE_FIELD_HASHES`): a run in another environment changes them
+    by floating-point rounding, which the layer comparison already judges.
+    A difference there is a warning.
+    """
+
+    def _parse(data: np.ndarray) -> dict[str, Any]:
+        return json.loads(str(_as_str_array(np.asarray(data)).reshape(-1)[0]))
+
+    try:
+        ref, test = _parse(ref_data), _parse(test_data)
+    except Exception as exc:  # noqa: BLE001 - unparsable is a difference
+        report.fail(group, f"{name}: cannot parse ({exc})")
+        return
+    diffs = sorted(k for k in set(ref) | set(test) if ref.get(k) != test.get(k))
+    hard = [k for k in diffs if k not in _PROVENANCE_FIELD_HASHES]
+    if hard:
+        report.fail(group, f"{name}: differs at {hard[:8]}")
+    elif diffs:
+        report.warn(
+            group,
+            f"{name}: field hashes differ ({diffs}); the GNSS field is checked"
+            " through the product layers (another environment rounds it"
+            " differently)",
+        )
+
+
 #: Scalar variables compared by meaning rather than by text.
 SEMANTIC_VALUES = {
     ("metadata", "algorithm_parameters_yaml"): _compare_algorithm_parameters,
+    ("metadata", "gnss_provenance"): _compare_gnss_provenance,
 }
 
 
