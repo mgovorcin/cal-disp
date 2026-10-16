@@ -130,6 +130,13 @@ def format_summary_section(
     return lines
 
 
+def _overrides_version(overrides_file: Path | str) -> str | None:
+    """Top-level ``version`` of an overrides file (Venti's frame table), if any."""
+    with open(overrides_file) as f:
+        version = json.load(f).get("version")
+    return None if version is None else str(version)
+
+
 def _parse_algorithm_overrides(
     overrides_file: Path | str | None, frame_id: int | str
 ) -> dict[str, Any]:

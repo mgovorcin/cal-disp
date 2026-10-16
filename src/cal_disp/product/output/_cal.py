@@ -541,6 +541,9 @@ class CalProduct:
         product_specification_document_id: str | None = None,
         pge_runconfig: str | None = None,
         gnss_provenance_json: str | None = None,
+        algorithm_schema_version: int | None = None,
+        frame_parameters_version: str | None = None,
+        components_applied_json: str | None = None,
     ) -> None:
         """Add metadata group to existing product.
 
@@ -615,6 +618,9 @@ class CalProduct:
             product_specification_document_id=product_specification_document_id,
             pge_runconfig=pge_runconfig,
             gnss_provenance_json=gnss_provenance_json,
+            algorithm_schema_version=algorithm_schema_version,
+            frame_parameters_version=frame_parameters_version,
+            components_applied_json=components_applied_json,
         )
         ds_meta.to_netcdf(
             self.path,
