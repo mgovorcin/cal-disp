@@ -40,3 +40,8 @@ changes what a run produces, so they happen together, after the VnV sign-off
 ## 5. Release (T51)
 - [x] Tag `v0.5.0` on the merge commit (`438b84e`, 2026-10-15); image `cal-disp:0.5.0` built from the tag and validated against the golden.
 - [ ] Push the image to the registry (owner).
+
+## 0.5.1 (2026-10-16)
+- [x] Metadata fields (T37.3, T27.4; #24); golden rebuilt in `0.5.1-rc` (metadata only).
+- [x] Tag `v0.5.1` on `54e6382`; image `cal-disp:0.5.1` built from the tag and validated against the golden.
+- [ ] Push the image (owner, with 0.5.0's).

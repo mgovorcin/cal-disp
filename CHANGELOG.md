@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.1] — release candidate `0.5.1rc1`, 2026-10-16
+## [0.5.1] — 2026-10-16 (tag `v0.5.1` on `54e6382`)
 
 ### Added
 - **[product]** `/metadata` on the v0.5 route records `algorithm_schema_version`

@@ -2,6 +2,7 @@
 
 | Tag | Built | Host | Source | Size | Image ID |
 |---|---|---|---|---|---|
+| `cal-disp:0.5.1` | 2026-10-16 | aurora (`docker/build-docker-image.sh`, `--network=host`) | tag `v0.5.1` (`54e6382`), version `0.5.1` | 1.28 GB | `sha256:f333f7bfc62e09322317e2bf6c940ac82f5267adf41385e7717d76fe3a8866c9` |
 | `cal-disp:0.5.1-rc` | 2026-10-16 | aurora (`docker/build-docker-image.sh -v 0.5.1rc1`, `--network=host`) | branch `feature/t37-3-metadata` `df23416`, version `0.5.1rc1` | 1.28 GB | `sha256:a7d61bc66b1b3d612d43a52cd753eac62d546237eb4fcaaffe44daa08052ae2b` |
 | `cal-disp:0.5.0` | 2026-10-15 | aurora (`docker/build-docker-image.sh`, `--network=host`) | tag `v0.5.0` (`438b84e`), version `0.5.0` | 1.28 GB | `sha256:f29cd9131c4000f719207759645111ba497ab1d077aca029c3e605161a04ffe1` |
 | `cal-disp:0.5.0-rc` | 2026-10-15 | aurora (`docker/build-docker-image.sh -v 0.5.0rc1`, `--network=host`) | T49 branch `54fe893` + the Dockerfile change dropping the `download` extra (same commit as this record), version `0.5.0rc1` | 1.28 GB | `sha256:d3f0fafcabaf6d2d0898e6c5f4402a0423b42f4097daeca4dc88d95493fadc18` |
@@ -38,3 +39,9 @@ file reproduces the archived 0.3 golden's data layers at 1e-6.
 Built from the `v0.5.0` tag; reports `cal-disp 0.5.0`, Venti `2d529ae`. Budget
 check OK. The v0.5 golden (built in `0.5.0-rc`) validates in this image at
 1e-6, peak 5.75 GB (`test_golden/validation_0.5.0_release_image.log`).
+
+## 0.5.1 (2026-10-16)
+
+Built from the `v0.5.1` tag; reports `cal-disp 0.5.1`, Venti `35ec67e`. Budget
+check OK. The 0.5.1 golden (built in `0.5.1-rc`) validates in this image at
+1e-6, peak 5.76 GB (`test_golden/validation_0.5.1_release_image.log`).
