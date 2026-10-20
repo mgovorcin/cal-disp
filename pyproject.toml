@@ -125,6 +125,10 @@ ignore = [
   "PTH207", # "Replace `glob` with `Path.glob` or `Path.rglob`
 ]
 
+[tool.ruff.lint.isort]
+# _version.py is generated (absent in a fresh CI checkout): pin the section
+known-first-party = ["cal_disp"]
+
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["F403"]
 "tests/**" = ["D", "N", "PTH"]

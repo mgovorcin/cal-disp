@@ -581,6 +581,12 @@ class CalProduct:
             PGE runconfig YAML content.
         gnss_provenance_json : str or None, optional
             GNSS provenance record (JSON), written as ``gnss_provenance`` when given.
+        algorithm_schema_version : int or None, optional
+            Venti algorithm-parameter schema version (v0.5 route only).
+        frame_parameters_version : str or None, optional
+            Top-level version of the runconfig's frame table, e.g. ``0.7-draft``.
+        components_applied_json : str or None, optional
+            JSON of which ``cal_*`` components are summed into ``calibration``.
 
         Raises
         ------
