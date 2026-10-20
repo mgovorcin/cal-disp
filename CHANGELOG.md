@@ -3,6 +3,24 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [0.5.2] — release candidate `0.5.2rc1`, 2026-10-20
+
+### Changed
+- **[product]** Venti `ca58158`: frame table 0.7-draft adds F18904, the LA
+  descending VLM partner, with LA's settings (`surface.regions = separate`,
+  `tropo.mode = stratified`; venti-dev #44). Unlisted, F18904's Catalina island
+  offset was wrong (CAT2 LOS −54.2 vs GNSS −29.7 mm/yr). With the entry: F18904
+  DISP gate PASS, DD sill −91.4% vs raw (−89.0% unlisted); LA VLM gated NMAD
+  1.32 mm/yr (1.46). Values change only for F18904; F18904 needs staged
+  TROPO-ZENITH files for the stratified correction.
+
+### Golden
+Rebuilt in `cal-disp:0.5.2-rc` (`docs/golden/MANIFEST_0.5.2.sha256`). Every data
+layer is bit-identical to 0.5.1; the only product difference is
+`/metadata/frame_parameters_version` (`0.6-draft` → `0.7-draft`), which made
+the 0.5.1 golden fail (1 difference). The 0.5.1 golden is archived in
+`test_golden/archive/golden_v0.5.1_20261016/`.
+
 ## [0.5.1] — 2026-10-16 (tag `v0.5.1` on `54e6382`)
 
 ### Added

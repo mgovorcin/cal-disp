@@ -45,3 +45,8 @@ changes what a run produces, so they happen together, after the VnV sign-off
 - [x] Metadata fields (T37.3, T27.4; #24); golden rebuilt in `0.5.1-rc` (metadata only).
 - [x] Tag `v0.5.1` on `54e6382`; image `cal-disp:0.5.1` built from the tag and validated against the golden.
 - [ ] Push the image (owner, with 0.5.0's).
+
+## 0.5.2 (2026-10-20)
+- [x] Venti `ca58158` (frame table 0.7-draft: F18904 mirrors LA; venti-dev #44); golden rebuilt in `0.5.2-rc` (metadata only: `frame_parameters_version`).
+- [ ] Tag `v0.5.2` after merge (owner); build `cal-disp:0.5.2` from the tag and validate against the golden.
+- [ ] Push the image (owner, with 0.5.0/0.5.1).
