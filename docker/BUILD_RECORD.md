@@ -2,6 +2,7 @@
 
 | Tag | Built | Host | Source | Size | Image ID |
 |---|---|---|---|---|---|
+| `cal-disp:0.5.2` | 2026-10-20 | aurora (`docker/build-docker-image.sh -t cal-disp:0.5.2`, `--network=host`) | tag `v0.5.2` (`1d64f2f`), version `0.5.2` | 1.28 GB | `sha256:b4b0d7047299cdf8e5484dd5a65f607bf33f43823e90616e84246d712e52d2a3` |
 | `cal-disp:0.5.2-rc` | 2026-10-20 | aurora (`docker/build-docker-image.sh -t cal-disp:0.5.2-rc -v 0.5.2rc1`, `--network=host`) | branch `release/0.5.2-frame-f18904` `9f05f5c`, version `0.5.2rc1` | 1.28 GB | `sha256:4225dde676de01a372a97365d08a4e8983063592020c59783241e01137bdab34` |
 | `cal-disp:0.5.1` | 2026-10-16 | aurora (`docker/build-docker-image.sh`, `--network=host`) | tag `v0.5.1` (`54e6382`), version `0.5.1` | 1.28 GB | `sha256:f333f7bfc62e09322317e2bf6c940ac82f5267adf41385e7717d76fe3a8866c9` |
 | `cal-disp:0.5.1-rc` | 2026-10-16 | aurora (`docker/build-docker-image.sh -v 0.5.1rc1`, `--network=host`) | branch `feature/t37-3-metadata` `df23416`, version `0.5.1rc1` | 1.28 GB | `sha256:a7d61bc66b1b3d612d43a52cd753eac62d546237eb4fcaaffe44daa08052ae2b` |
@@ -46,3 +47,7 @@ check OK. The v0.5 golden (built in `0.5.0-rc`) validates in this image at
 Built from the `v0.5.1` tag; reports `cal-disp 0.5.1`, Venti `35ec67e`. Budget
 check OK. The 0.5.1 golden (built in `0.5.1-rc`) validates in this image at
 1e-6, peak 5.76 GB (`test_golden/validation_0.5.1_release_image.log`).
+
+Note (2026-10-20): the local images listed above for 0.3.0-rc through 0.5.2-rc were
+removed from aurora by a Docker prune outside this build; only `cal-disp:0.5.2` is
+local. None had been pushed; each is reproducible from its tag or branch.

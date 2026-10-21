@@ -48,5 +48,5 @@ changes what a run produces, so they happen together, after the VnV sign-off
 
 ## 0.5.2 (2026-10-20)
 - [x] Venti `ca58158` (frame table 0.7-draft: F18904 mirrors LA; venti-dev #44); golden rebuilt in `0.5.2-rc` (metadata only: `frame_parameters_version`).
-- [ ] Tag `v0.5.2` after merge (owner); build `cal-disp:0.5.2` from the tag and validate against the golden.
-- [ ] Push the image (owner, with 0.5.0/0.5.1).
+- [x] Tag `v0.5.2` on `1d64f2f` (owner, 2026-10-20); image `cal-disp:0.5.2` built from the tag and validated against the golden (`test_golden/validation_0.5.2_release_image.log`).
+- [ ] Push the image (owner). The local 0.5.0/0.5.1 images were pruned on 2026-10-20; rebuild from the tags if they are to be pushed.
