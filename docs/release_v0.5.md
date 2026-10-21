@@ -53,5 +53,5 @@ changes what a run produces, so they happen together, after the VnV sign-off
 
 ## 0.5.3 (2026-10-20)
 - [x] Venti `50689b6` (venti-dev #45: stratified tropo evaluated wherever DEM and delay exist); image `0.5.3-rc` validates against the 0.5.2 golden (no rebuild).
-- [ ] Tag `v0.5.3` after merge (owner); build `cal-disp:0.5.3` from the tag and validate against the golden.
+- [x] Tag `v0.5.3` on `3f2c241` (owner, 2026-10-20); image `cal-disp:0.5.3` built from the tag and validated against the golden (`test_golden/validation_0.5.3_release_image.log`).
 - [ ] Push the image (owner).

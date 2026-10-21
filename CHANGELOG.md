@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.3] — release candidate `0.5.3rc1`, 2026-10-20
+## [0.5.3] — 2026-10-20 (tag `v0.5.3` on `3f2c241`)
 
 ### Fixed
 - **[product]** Venti `50689b6` (venti-dev #45): the stratified tropo model is
