@@ -12,6 +12,7 @@ input, static-ancillary and golden-output file
 | Golden product | `OPERA_L4_DISP-CAL-S1_IW_F08882_VV_20220111T002651Z_20220722T002657Z_v1.0_20261020T160242Z.nc` |
 | Change vs 0.5.1 | data layers bit-identical; `/metadata/frame_parameters_version` `0.6-draft` → `0.7-draft` (Venti `ca58158`, F18904 entry) |
 | Validation in the image | passed at 1e-6 (`test_golden/validation_0.5.2.log`) |
+| Also validated in | `cal-disp:0.5.3-rc` (2026-10-20, `test_golden/validation_0.5.3rc1.log`): 0.5.3 changes only stratified-tropo frames, the golden frame runs tropo off |
 | Change vs 0.3 | `calibration` median \|Δ\| 12.2 mm (max 113 mm); `calibration_std` NaN exactly where `calibration` is (CHANGELOG) |
 | Previous golden (v0.5.1, 2026-10-16) | archived in `test_golden/archive/golden_v0.5.1_20261016/`; manifest `MANIFEST_0.5.1.sha256` |
 | v0.5.0 golden (2026-10-15) | archived in `test_golden/archive/golden_v0.5.0_20261015/`; manifest `MANIFEST_0.5.0.sha256` |
