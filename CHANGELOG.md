@@ -3,6 +3,22 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [0.5.3] — release candidate `0.5.3rc1`, 2026-10-20
+
+### Fixed
+- **[product]** Venti `50689b6` (venti-dev #45): the stratified tropo model is
+  evaluated wherever the DEM and the delay exist; the fit still uses only the
+  pair's valid pixels. Before, `cal_tropo` (and so `calibration`) was NaN
+  wherever that epoch's DISP was masked, 16–24% of each epoch on the frames
+  with `tropo.mode = stratified` (F16940, F18904, F35991), ~90% of it pixels
+  with finite DISP and `recommended_mask = 0`. Pixels that were valid are
+  bit-identical. LA VLM: 172 gated stations, NMAD 1.29 mm/yr (161, 1.32);
+  Puerto Rico DISP gate PASS, velocity RMSE 3.18 → 3.08 mm/yr.
+
+### Golden
+Unchanged: the golden frame (F08882) runs with tropo off, and the 0.5.3 image
+validates against the 0.5.2 golden (`test_golden/validation_0.5.3rc1.log`).
+
 ## [0.5.2] — 2026-10-20 (tag `v0.5.2` on `1d64f2f`)
 
 ### Changed

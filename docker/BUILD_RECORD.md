@@ -2,6 +2,7 @@
 
 | Tag | Built | Host | Source | Size | Image ID |
 |---|---|---|---|---|---|
+| `cal-disp:0.5.3-rc` | 2026-10-20 | aurora (`docker/build-docker-image.sh -t cal-disp:0.5.3-rc -v 0.5.3rc1`, `--network=host`) | branch `release/0.5.3-stratified-tropo`, version `0.5.3rc1` | 1.28 GB | `sha256:6baadd83b52bb2d8de823ef86ec70aa1b42e601070f78027f0ab22f572d28724` |
 | `cal-disp:0.5.2` | 2026-10-20 | aurora (`docker/build-docker-image.sh -t cal-disp:0.5.2`, `--network=host`) | tag `v0.5.2` (`1d64f2f`), version `0.5.2` | 1.28 GB | `sha256:b4b0d7047299cdf8e5484dd5a65f607bf33f43823e90616e84246d712e52d2a3` |
 | `cal-disp:0.5.2-rc` | 2026-10-20 | aurora (`docker/build-docker-image.sh -t cal-disp:0.5.2-rc -v 0.5.2rc1`, `--network=host`) | branch `release/0.5.2-frame-f18904` `9f05f5c`, version `0.5.2rc1` | 1.28 GB | `sha256:4225dde676de01a372a97365d08a4e8983063592020c59783241e01137bdab34` |
 | `cal-disp:0.5.1` | 2026-10-16 | aurora (`docker/build-docker-image.sh`, `--network=host`) | tag `v0.5.1` (`54e6382`), version `0.5.1` | 1.28 GB | `sha256:f333f7bfc62e09322317e2bf6c940ac82f5267adf41385e7717d76fe3a8866c9` |
