@@ -64,6 +64,6 @@ changes what a run produces, so they happen together, after the VnV sign-off
 ## 0.5.5 (2026-10-22)
 - [x] `/plate_motion` group (ITRF2020-PMM, per-pair LOS) and GNSS E/N/U displacement in `/auxiliary` (#33); peak-memory fix (#34). `calibration` and `calibration_std` unchanged.
 - [x] Golden rebuilt in `0.5.5-rc` (new `/plate_motion`, filled `/auxiliary`); reproduced in the image, peak 5.70 GB, budget OK.
-- [ ] Tag `v0.5.5` after merge (owner); build `cal-disp:0.5.5` from the tag and validate against the golden.
+- [x] Tag `v0.5.5` on `c1f3579` (owner, 2026-10-22; first placed on `8e5e797`, before #34, and moved); image `cal-disp:0.5.5` built from the tag and validated against the golden, peak 5.77 GB, budget OK (`test_golden/validation_0.5.5_release_image.log`).
 - [ ] Push the image (owner).
 - [ ] cal-vlm-batch: rebuild the cal-disp worker image on `cal-disp:0.5.5` so Batch products carry the new layers.

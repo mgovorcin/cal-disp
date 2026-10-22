@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.5] — release candidate `0.5.5rc1`, 2026-10-22
+## [0.5.5] — 2026-10-22 (tag `v0.5.5` on `c1f3579`)
 
 ### Added
 - **[product]** `/plate_motion` group: LOS displacement of the frame's rigid
