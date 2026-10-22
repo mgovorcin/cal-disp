@@ -60,3 +60,10 @@ changes what a run produces, so they happen together, after the VnV sign-off
 - [x] Venti `1fa4436` (frame table 0.8-draft: Hawaii stratified tropo, venti-dev #48; decision 0004); golden rebuilt in `0.5.4-rc` (metadata only: `frame_parameters_version`).
 - [x] Tag `v0.5.4` on `c3e96bb` (owner, 2026-10-22); image `cal-disp:0.5.4` built from the tag and validated against the golden (`test_golden/validation_0.5.4_release_image.log`).
 - [ ] Push the image (owner).
+
+## 0.5.5 (2026-10-22)
+- [x] `/plate_motion` group (ITRF2020-PMM, per-pair LOS) and GNSS E/N/U displacement in `/auxiliary` (#33); peak-memory fix (#34). `calibration` and `calibration_std` unchanged.
+- [x] Golden rebuilt in `0.5.5-rc` (new `/plate_motion`, filled `/auxiliary`); reproduced in the image, peak 5.70 GB, budget OK.
+- [ ] Tag `v0.5.5` after merge (owner); build `cal-disp:0.5.5` from the tag and validate against the golden.
+- [ ] Push the image (owner).
+- [ ] cal-vlm-batch: rebuild the cal-disp worker image on `cal-disp:0.5.5` so Batch products carry the new layers.

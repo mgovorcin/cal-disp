@@ -187,7 +187,7 @@ cal-disp validate reference.nc output.nc
 cal-disp validate reference.nc output.nc --tolerance 1e-5
 cal-disp validate reference.nc output.nc --rtol 1e-5 --atol 1e-7
 
-# Only the root, identification and metadata groups (skip the auxiliary group)
+# Only the root, identification and metadata groups (skip auxiliary and plate_motion)
 cal-disp validate reference.nc output.nc --group main
 ```
 
@@ -222,6 +222,33 @@ A golden product validates only in the software environment that made it: for a
 delivery, build it inside the delivered image (see the script header).
 
 ---
+
+## Output product
+
+One NetCDF4 file per DISP-S1 pair, `OPERA_L4_DISP-CAL-S1_..._v1.0_<production>Z.nc`,
+plus a browse PNG. All layers are **per-pair** LOS displacement or ENU
+displacement in metres, like DISP (positive toward the satellite), for the
+pair's reference → secondary span.
+
+| Group | Layer | Content |
+|---|---|---|
+| `/` | `calibration` | Correction to subtract from DISP: `DISP − calibration` is absolute in IGS20 (the UNR grid's frame) |
+| `/` | `calibration_std` | 1-σ of the calibration surface (σ_CAL) |
+| `/plate_motion` | `plate_motion` | LOS displacement of the frame's rigid plate rotation over the pair, ITRF2020-PMM, plate from the frame table (default NA). `DISP − calibration − plate_motion` is plate-fixed (e.g. North America fixed). Group attributes: `plate`, `plate_motion_model`, `pair_span_years` |
+| `/auxiliary` | `east_west`, `north_south`, `up_down` (+ `*_std`) | GNSS E/N/U displacement over the pair on a ~5 km grid: the UNR grid the calibration used, sampled with the same options. Divide by the group attribute `pair_span_years` for velocity |
+| `/identification`, `/metadata` | | Product identification (CEOS-ARD) and provenance: algorithm parameters, GNSS provenance, frame-table version |
+
+```python
+import xarray as xr
+
+f = "OPERA_L4_DISP-CAL-S1_....nc"
+disp = xr.open_dataset("OPERA_L3_DISP-S1_....nc")["displacement"]
+cal = xr.open_dataset(f)["calibration"].squeeze("time", drop=True)
+plate = xr.open_dataset(f, group="plate_motion")["plate_motion"].squeeze("time", drop=True)
+
+disp_igs20 = disp - cal          # absolute, IGS20 (same x/y grid as DISP)
+disp_na = disp - cal - plate     # North America fixed
+```
 
 ## Algorithm Parameters
 
