@@ -400,6 +400,113 @@ def _gnss_los_fields_enu(
     return gnss_los, gnss_los_std, field.provenance
 
 
+#: Pixel step of the coarse `/auxiliary` grid (about 5 km at 30 m posting).
+AUXILIARY_STEP = 167
+
+
+def _auxiliary_gnss_displacement(
+    gnss_options: Any,
+    grid_lookup: Path,
+    station_dir: Path,
+    utm_epsg: int,
+    reference_frame: str,
+    grid_version: str,
+    x: np.ndarray,
+    y: np.ndarray,
+    dt_years: float,
+    defo_area_db_json: Path | None = None,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """GNSS E/N/U displacement over the pair and its sigma (m) on the coarse grid.
+
+    The UNR constant grid sampled by `venti.gnss.sampling.sample_gnss_enu` with
+    the calibration's own options (buffer, defo-node exclusion and
+    re-interpolation), at the `/auxiliary` grid points, and scaled by the pair
+    span exactly as `project_field_to_los` scales the LOS field: velocity x
+    ``dt_years`` and sigma x ``|dt_years|``. Divide by the span for velocity.
+    """
+    from venti.gnss.sampling import GnssGridConfig, sample_gnss_enu
+
+    cfg = GnssGridConfig(
+        grid_lookup=grid_lookup,
+        station_dir=station_dir,
+        utm_epsg=utm_epsg,
+        reference_frame=reference_frame,
+        grid_type="constant",
+        version=grid_version,
+        buffer_meters=gnss_options.buffer_meters,
+        exclude_defo_nodes=gnss_options.exclude_defo_nodes,
+        reinterpolate_excluded=gnss_options.reinterpolate_excluded,
+        snapshot_id=gnss_options.snapshot_id,
+    )
+    exclude = db_version = None
+    if gnss_options.exclude_defo_nodes and defo_area_db_json is not None:
+        from venti.calibration.remove_restore import load_area_db
+
+        db = load_area_db(defo_area_db_json)
+        exclude, db_version = db.shapes(), db.version
+    field = sample_gnss_enu(
+        cfg, (x[::AUXILIARY_STEP], y[::AUXILIARY_STEP]), exclude, db_version
+    )
+    names = {"east_west": "e", "north_south": "n", "up_down": "u"}
+    disp = {
+        k: (np.asarray(getattr(field, f"v{c}")) * dt_years / 1000.0).astype(np.float32)
+        for k, c in names.items()
+    }
+    std = {
+        f"{k}_std": (
+            (np.asarray(getattr(field, f"sigma_v{c}")) * abs(dt_years) / 1000.0).astype(
+                np.float32
+            )
+        )
+        for k, c in names.items()
+    }
+    return disp, std
+
+
+def _plate_motion_los(
+    plate: str,
+    utm_epsg: int,
+    los: tuple[np.ndarray, np.ndarray, np.ndarray],
+    x: np.ndarray,
+    y: np.ndarray,
+    dt_years: float,
+    block_rows: int = 512,
+) -> np.ndarray:
+    """LOS displacement (m) of rigid `plate` motion (ITRF2020-PMM) over the pair.
+
+    The plate's ENU velocity (`geepers.euler.plate_velocity_enu`, mm/yr, no up
+    component) is evaluated on a ~5 km grid spanning the frame, where a rigid
+    rotation is linear to well below a micron, interpolated to each pixel and
+    projected on its LOS, row block by row block to keep memory flat.
+    ``DISP - calibration - plate_motion`` is the plate-fixed displacement.
+    NaN where the LOS has no look.
+    """
+    from geepers.euler import plate_velocity_enu
+    from pyproj import Transformer
+
+    # uniform coarse grid spanning the frame edge to edge, so no pixel is
+    # beyond the outermost sample (interpolation, never edge-hold)
+    xc = np.linspace(x[0], x[-1], -(-len(x) // AUXILIARY_STEP) + 1)
+    yc = np.linspace(y[0], y[-1], -(-len(y) // AUXILIARY_STEP) + 1)
+    xx, yy = np.meshgrid(xc, yc)
+    lon, lat = Transformer.from_crs(utm_epsg, 4326, always_xy=True).transform(xx, yy)
+    ve, vn, _ = plate_velocity_enu(lon.ravel(), lat.ravel(), plate)
+    ve, vn = (np.asarray(v, dtype=np.float64).reshape(xx.shape) for v in (ve, vn))
+    los_east, los_north, _ = los
+    out = np.empty(los_east.shape, dtype=np.float32)
+    scale = dt_years / 1000.0
+    for r0 in range(0, len(y), block_rows):
+        rows = slice(r0, r0 + block_rows)
+        ve_b = _upsample_centres(ve, xc, yc, x, y[rows])
+        vn_b = _upsample_centres(vn, xc, yc, x, y[rows])
+        out[rows] = (los_east[rows] * ve_b + los_north[rows] * vn_b) * scale
+    no_look = (los_east == 0) & (los_north == 0)
+    out[no_look] = np.nan
+    # 1 micron: the smooth field's float32 mantissa noise otherwise defeats the
+    # compression (golden pair: 35 MB -> 6 MB, error <= 0.5 micron)
+    return np.round(out, 6)
+
+
 def _upsample_centres(
     field: np.ndarray, xc: np.ndarray, yc: np.ndarray, x: np.ndarray, y: np.ndarray
 ) -> np.ndarray:
@@ -852,6 +959,34 @@ def run_calibration(
             ref_decimal,
             sec_decimal,
         )
+    # /auxiliary: the GNSS E/N/U displacement over the pair, on the coarse grid
+    # (constant grid only: the variable grid is not sampled through Venti)
+    model_3d = model_3d_std = None
+    if cal.grid_type == "constant":
+        model_3d, model_3d_std = _auxiliary_gnss_displacement(
+            v_opts.gnss,
+            Path(unr_grid_latlon_file),
+            gnss_dir,
+            disp_product.get_epsg(),
+            cal.reference_frame,
+            calibration_reference_version,
+            x,
+            y,
+            sec_decimal - ref_decimal,
+            defo_area_db_json=defo_area_db_json,
+        )
+    # /plate_motion: rigid plate rotation over the pair, on the DISP grid
+    plate = v_opts.frame.plate
+    plate_motion_m = _plate_motion_los(
+        plate,
+        disp_product.get_epsg(),
+        (los_east, los_north, los_up),
+        x,
+        y,
+        sec_decimal - ref_decimal,
+    )
+    logger.info("plate_motion: %s plate (ITRF2020-PMM)", plate)
+
     # the LOS bands only serve the GNSS projection; three full float32 frames
     del los_east, los_north, los_up
 
@@ -1133,25 +1268,30 @@ def run_calibration(
         },
     )
 
-    # 3-D velocity model: zero placeholder until decomposition exists
-    coarse_y = y[::167]
-    coarse_x = x[::167]
-    coarse_shape = (len(time), len(coarse_y), len(coarse_x))
+    # /auxiliary: GNSS E/N/U displacement over the pair (zeros where the grid
+    # type has no Venti sampling path, as before)
+    coarse_y = y[::AUXILIARY_STEP]
+    coarse_x = x[::AUXILIARY_STEP]
     coarse_coords = {"time": time, "y": coarse_y, "x": coarse_x}
 
-    def _zero_da(long_name: str, units: str) -> xr.DataArray:
+    def _coarse_da(values: np.ndarray | None) -> xr.DataArray:
+        if values is None:
+            values = np.zeros((len(coarse_y), len(coarse_x)), dtype=np.float32)
         return xr.DataArray(
-            np.zeros(coarse_shape, dtype=np.float32),
-            coords=coarse_coords,
-            dims=["time", "y", "x"],
-            attrs={"units": units, "long_name": long_name},
+            values[np.newaxis, :, :], coords=coarse_coords, dims=["time", "y", "x"]
         )
 
-    model_3d = {
-        "north_south": _zero_da("north_south_velocity", "meters/year"),
-        "east_west": _zero_da("east_west_velocity", "meters/year"),
-        "up_down": _zero_da("up_down_velocity", "meters/year"),
-    }
+    aux_comps = ("north_south", "east_west", "up_down")
+    model_3d_da = {k: _coarse_da(model_3d[k] if model_3d else None) for k in aux_comps}
+    model_3d_std_da = (
+        {f"{k}_std": _coarse_da(model_3d_std[f"{k}_std"]) for k in aux_comps}
+        if model_3d_std
+        else None
+    )
+    plate_motion = xr.DataArray(
+        plate_motion_m[np.newaxis, :, :], coords=coords, dims=["time", "y", "x"]
+    )
+    del plate_motion_m
 
     def _pkg_version(name: str) -> str:
         try:
@@ -1255,8 +1395,18 @@ def run_calibration(
         ),
     )
 
+    span_years = sec_decimal - ref_decimal
     cal_product.add_auxiliary(
-        model_3d=model_3d,
+        model_3d=model_3d_da,
+        model_3d_std=model_3d_std_da,
+        spatial_ref=spatial_ref,
+        pair_span_years=span_years,
+        gnss_sampled=model_3d is not None,
+    )
+    cal_product.add_plate_motion(
+        plate_motion,
+        plate=plate,
+        pair_span_years=span_years,
         spatial_ref=spatial_ref,
     )
 

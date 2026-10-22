@@ -16,6 +16,7 @@ from ._auxiliary import build_auxiliary_dataset
 from ._identification import build_identification_dataset
 from ._main import build_main_dataset
 from ._metadata import build_metadata_dataset
+from ._plate_motion import build_plate_motion_dataset
 from ._utils import (
     build_encoding,
     build_filename,
@@ -641,6 +642,8 @@ class CalProduct:
         model_3d: dict[str, xr.DataArray] | None = None,
         model_3d_std: dict[str, xr.DataArray] | None = None,
         spatial_ref: xr.DataArray | None = None,
+        pair_span_years: float | None = None,
+        gnss_sampled: bool = True,
     ) -> None:
         """Add auxiliary group with 3D displacement model to existing product.
 
@@ -653,6 +656,10 @@ class CalProduct:
             3D displacement uncertainties.
         spatial_ref : xr.DataArray or None, optional
             Spatial reference.
+        pair_span_years : float or None, optional
+            Pair span (decimal years), recorded in the group attributes.
+        gnss_sampled : bool, optional
+            False when the components are a zero placeholder.
 
         Raises
         ------
@@ -682,6 +689,8 @@ class CalProduct:
             model_3d=model_3d,
             model_3d_std=model_3d_std,
             spatial_ref=spatial_ref,
+            pair_span_years=pair_span_years,
+            gnss_sampled=gnss_sampled,
         )
         ds_aux.to_netcdf(
             self.path,
@@ -689,6 +698,55 @@ class CalProduct:
             group="auxiliary",
             engine="h5netcdf",
             encoding=build_encoding(ds_aux, compression=self.compression),
+        )
+
+    def add_plate_motion(
+        self,
+        plate_motion: xr.DataArray,
+        plate: str,
+        pair_span_years: float,
+        spatial_ref: xr.DataArray | None = None,
+        model: str = "ITRF2020-PMM",
+    ) -> None:
+        """Add the ``plate_motion`` group: rigid plate motion over the pair in LOS.
+
+        ``DISP - calibration - plate_motion`` is the plate-fixed displacement
+        (e.g. North America fixed); ``calibration`` itself stays in IGS20.
+
+        Parameters
+        ----------
+        plate_motion : xr.DataArray
+            LOS displacement (m) on the DISP grid, dimensions (time, y, x).
+        plate : str
+            Plate of the frame (frame-parameter table), e.g. "NA".
+        pair_span_years : float
+            Pair span (decimal years) the velocity was scaled by.
+        spatial_ref : xr.DataArray or None, optional
+            Spatial reference of the DISP grid.
+        model : str, optional
+            Plate-motion model. Default "ITRF2020-PMM".
+
+        Raises
+        ------
+        FileNotFoundError
+            If product file does not exist.
+
+        """
+        if not self.path.exists():
+            raise FileNotFoundError(f"Product file not found: {self.path}")
+        ds = build_plate_motion_dataset(
+            plate_motion,
+            plate=plate,
+            model=model,
+            pair_span_years=pair_span_years,
+            spatial_ref=spatial_ref,
+        )
+        ds.to_netcdf(
+            self.path,
+            mode="a",
+            group="plate_motion",
+            engine="h5netcdf",
+            encoding=build_encoding(ds, compression=self.compression),
         )
 
     def open_dataset(self, group: str | None = None) -> xr.Dataset:

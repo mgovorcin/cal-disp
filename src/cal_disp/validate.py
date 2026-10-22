@@ -3,7 +3,7 @@
 Everything that makes a product is compared, group by group:
 
 * presence of every group (``main``, ``identification``, ``metadata``,
-  ``auxiliary``); a group missing on one side is a failure,
+  ``auxiliary``, ``plate_motion``); a group missing on one side is a failure,
 * the set of variables and coordinates, and their on-disk dtype and shape,
 * variable and group attributes (``units``, ``long_name``, ``grid_mapping``,
   ``_FillValue``, ...), except the volatile fields in :data:`IGNORED_ATTRS`,
@@ -46,7 +46,17 @@ DEFAULT_TOLERANCE: float = 1e-6
 BROWSE_MAX_DIM: int = 2048
 
 #: Groups of a DISP-CAL product; ``main`` is the root group.
-PRODUCT_GROUPS: tuple[str, ...] = ("main", "identification", "metadata", "auxiliary")
+PRODUCT_GROUPS: tuple[str, ...] = (
+    "main",
+    "identification",
+    "metadata",
+    "auxiliary",
+    "plate_motion",
+)
+
+#: Groups outside the calibration itself, selected by ``group="auxiliary"``;
+#: absent from both products is a warning, not a failure (older products).
+AUXILIARY_GROUPS: tuple[str, ...] = ("auxiliary", "plate_motion")
 
 #: Attributes and scalar variables that legitimately differ between two runs
 #: of the same software on the same inputs. Keys are ``(group, variable)``;
@@ -140,7 +150,7 @@ def compare_cal_products(
         (``numpy.allclose`` semantics). Default :data:`DEFAULT_TOLERANCE`.
     group : str, optional
         ``"main"`` (root, identification and metadata groups and the browse
-        image), ``"auxiliary"`` (the 3-D model group) or ``"all"``.
+        image), ``"auxiliary"`` (the auxiliary and plate_motion groups) or ``"all"``.
     tolerance : float, optional
         Shortcut setting both ``rtol`` and ``atol``.
     browse_max_dim : int, optional
@@ -176,15 +186,15 @@ def compare_cal_products(
 
     groups = list(PRODUCT_GROUPS)
     if group == "main":
-        groups.remove("auxiliary")
+        groups = [g for g in groups if g not in AUXILIARY_GROUPS]
     elif group == "auxiliary":
-        groups = ["auxiliary"]
+        groups = list(AUXILIARY_GROUPS)
 
     for name in groups:
         ref_ds = _open_group(reference_file, name)
         test_ds = _open_group(test_file, name)
         if ref_ds is None and test_ds is None:
-            if name == "auxiliary":
+            if name in AUXILIARY_GROUPS:
                 report.warn(name, "group absent from both products")
             else:
                 report.fail(name, "group absent from both products")
