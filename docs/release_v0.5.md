@@ -55,3 +55,8 @@ changes what a run produces, so they happen together, after the VnV sign-off
 - [x] Venti `50689b6` (venti-dev #45: stratified tropo evaluated wherever DEM and delay exist); image `0.5.3-rc` validates against the 0.5.2 golden (no rebuild).
 - [x] Tag `v0.5.3` on `3f2c241` (owner, 2026-10-20); image `cal-disp:0.5.3` built from the tag and validated against the golden (`test_golden/validation_0.5.3_release_image.log`).
 - [ ] Push the image (owner).
+
+## 0.5.4 (2026-10-22)
+- [x] Venti `1fa4436` (frame table 0.8-draft: Hawaii stratified tropo, venti-dev #48; decision 0004); golden rebuilt in `0.5.4-rc` (metadata only: `frame_parameters_version`).
+- [ ] Tag `v0.5.4` after merge (owner); build `cal-disp:0.5.4` from the tag and validate against the golden.
+- [ ] Push the image (owner).
