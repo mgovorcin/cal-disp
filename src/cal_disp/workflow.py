@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 import rasterio
 import xarray as xr
+from rasterio.windows import Window
 
 from cal_disp._version import __version__
 from cal_disp.config._algorithm import AlgorithmParameters
@@ -466,7 +467,7 @@ def _auxiliary_gnss_displacement(
 def _plate_motion_los(
     plate: str,
     utm_epsg: int,
-    los: tuple[np.ndarray, np.ndarray, np.ndarray],
+    los: Path | tuple[np.ndarray, np.ndarray, np.ndarray],
     x: np.ndarray,
     y: np.ndarray,
     dt_years: float,
@@ -480,6 +481,10 @@ def _plate_motion_los(
     projected on its LOS, row block by row block to keep memory flat.
     ``DISP - calibration - plate_motion`` is the plate-fixed displacement.
     NaN where the LOS has no look.
+
+    `los` is the LOS GeoTIFF (read one row window at a time, so no full LOS
+    frame is held: this runs after the fit, under the peak-memory budget) or
+    the three bands already in memory.
     """
     from geepers.euler import plate_velocity_enu
     from pyproj import Transformer
@@ -492,19 +497,35 @@ def _plate_motion_los(
     lon, lat = Transformer.from_crs(utm_epsg, 4326, always_xy=True).transform(xx, yy)
     ve, vn, _ = plate_velocity_enu(lon.ravel(), lat.ravel(), plate)
     ve, vn = (np.asarray(v, dtype=np.float64).reshape(xx.shape) for v in (ve, vn))
-    los_east, los_north, _ = los
-    out = np.empty(los_east.shape, dtype=np.float32)
+    out = np.empty((len(y), len(x)), dtype=np.float32)
     scale = dt_years / 1000.0
-    for r0 in range(0, len(y), block_rows):
-        rows = slice(r0, r0 + block_rows)
-        ve_b = _upsample_centres(ve, xc, yc, x, y[rows])
-        vn_b = _upsample_centres(vn, xc, yc, x, y[rows])
-        out[rows] = (los_east[rows] * ve_b + los_north[rows] * vn_b) * scale
-    no_look = (los_east == 0) & (los_north == 0)
-    out[no_look] = np.nan
+    bands = None if isinstance(los, (str, Path)) else los
+    src = rasterio.open(los) if bands is None else None
+    try:
+        for r0 in range(0, len(y), block_rows):
+            rows = slice(r0, min(r0 + block_rows, len(y)))
+            if src is not None:
+                window = Window(0, rows.start, len(x), rows.stop - rows.start)
+                e, n, u = src.read((1, 2, 3), window=window).astype(np.float32)
+                no_look = (e == 0) & (n == 0) & (u == 0)
+                if src.nodata is not None and not np.isnan(src.nodata):
+                    no_look |= (e == src.nodata) | (n == src.nodata) | (u == src.nodata)
+            else:
+                assert bands is not None
+                e, n = bands[0][rows], bands[1][rows]
+                no_look = (e == 0) & (n == 0)
+            ve_b = _upsample_centres(ve, xc, yc, x, y[rows])
+            vn_b = _upsample_centres(vn, xc, yc, x, y[rows])
+            block = (e * ve_b + n * vn_b) * scale
+            block[no_look] = np.nan
+            out[rows] = block
+    finally:
+        if src is not None:
+            src.close()
     # 1 micron: the smooth field's float32 mantissa noise otherwise defeats the
     # compression (golden pair: 35 MB -> 6 MB, error <= 0.5 micron)
-    return np.round(out, 6)
+    np.round(out, 6, out=out)
+    return out
 
 
 def _upsample_centres(
@@ -975,18 +996,6 @@ def run_calibration(
             sec_decimal - ref_decimal,
             defo_area_db_json=defo_area_db_json,
         )
-    # /plate_motion: rigid plate rotation over the pair, on the DISP grid
-    plate = v_opts.frame.plate
-    plate_motion_m = _plate_motion_los(
-        plate,
-        disp_product.get_epsg(),
-        (los_east, los_north, los_up),
-        x,
-        y,
-        sec_decimal - ref_decimal,
-    )
-    logger.info("plate_motion: %s plate (ITRF2020-PMM)", plate)
-
     # the LOS bands only serve the GNSS projection; three full float32 frames
     del los_east, los_north, los_up
 
@@ -1288,10 +1297,23 @@ def run_calibration(
         if model_3d_std
         else None
     )
+    # /plate_motion: rigid plate rotation over the pair, on the DISP grid.
+    # Computed here, after the fit, from the LOS file in row windows, so it
+    # adds nothing to the run's peak memory.
+    plate = v_opts.frame.plate
     plate_motion = xr.DataArray(
-        plate_motion_m[np.newaxis, :, :], coords=coords, dims=["time", "y", "x"]
+        _plate_motion_los(
+            plate,
+            disp_product.get_epsg(),
+            los_file,
+            x,
+            y,
+            sec_decimal - ref_decimal,
+        )[np.newaxis, :, :],
+        coords=coords,
+        dims=["time", "y", "x"],
     )
-    del plate_motion_m
+    logger.info("plate_motion: %s plate (ITRF2020-PMM)", plate)
 
     def _pkg_version(name: str) -> str:
         try:
