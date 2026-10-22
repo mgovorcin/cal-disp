@@ -164,3 +164,22 @@ def test_validate_compares_the_plate_motion_group(
     ok, log = _validate(ref, test, caplog)
     assert not ok
     assert "group missing from the test product" in log
+
+
+def test_plate_motion_from_the_los_file_matches_in_memory(sample_static_los: Path):
+    """The run reads the LOS file in row windows after the fit; same values as
+    the in-memory bands, with the file's no-look pixels NaN."""
+    import rasterio
+
+    with rasterio.open(sample_static_los) as ds:
+        bands = ds.read((1, 2, 3)).astype(np.float32)
+        t, epsg = ds.transform, ds.crs.to_epsg()
+        x = t.c + t.a * (np.arange(ds.width) + 0.5)
+        y = t.f + t.e * (np.arange(ds.height) + 0.5)
+    from_file = _plate_motion_los(
+        "NA", epsg, sample_static_los, x, y, 0.7, block_rows=37
+    )
+    from_mem = _plate_motion_los("NA", epsg, tuple(bands), x, y, 0.7, block_rows=37)
+    np.testing.assert_array_equal(np.isnan(from_file), np.isnan(from_mem))
+    np.testing.assert_allclose(from_file, from_mem, atol=0, equal_nan=True)
+    assert np.isfinite(from_file).mean() > 0.9
