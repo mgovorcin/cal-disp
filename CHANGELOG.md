@@ -28,7 +28,7 @@ Product-affecting entries are marked **[product]**. Numbers on the golden pair
 --group main` passes against the 0.5.4 golden); `/auxiliary` changes and
 `/plate_motion` is new, so the golden needs a rebuild.
 
-## [0.5.4] — release candidate `0.5.4rc1`, 2026-10-22
+## [0.5.4] — 2026-10-22 (tag `v0.5.4` on `c3e96bb`)
 
 ### Changed
 - **[product]** Venti `1fa4436`: frame table 0.8-draft gives Hawaii (F23211)
