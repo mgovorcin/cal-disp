@@ -3,6 +3,26 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [0.5.4] — release candidate `0.5.4rc1`, 2026-10-22
+
+### Changed
+- **[product]** Venti `1fa4436`: frame table 0.8-draft gives Hawaii (F23211)
+  `tropo.mode = stratified` (venti-dev #48). Stratified vs off on v0.5.3:
+  DD sill −27.6% [−40.5, −19.4], velocity RMSE 2.40 → 2.30 mm/yr; the
+  |median bias| rise on 18 stations is not significant (disp2vlm_validation
+  decision 0004, accepted 2026-10-21). Values change only for F23211, which
+  needs staged TROPO-ZENITH files.
+- Venti also adds `surface.region_model` (`offset` default, unchanged values;
+  `plane` opt-in for large islands, venti-dev #47).
+
+### Golden
+Rebuilt in `cal-disp:0.5.4-rc` (`docs/golden/MANIFEST_0.5.4.sha256`). Every data
+layer is bit-identical to 0.5.2; the one product difference is
+`/metadata/frame_parameters_version` (`0.7-draft` → `0.8-draft`), which made
+the 0.5.2 golden fail (1 difference). `algorithm_parameters_yaml` gains the two
+new options at their defaults (compared as parameters, equal). The 0.5.2 golden
+is archived in `test_golden/archive/golden_v0.5.2_20261020/`.
+
 ## [0.5.3] — 2026-10-20 (tag `v0.5.3` on `3f2c241`)
 
 ### Fixed
