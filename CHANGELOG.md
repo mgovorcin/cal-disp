@@ -3,6 +3,31 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [Unreleased]
+
+### Added
+- **[product]** `/plate_motion` group: LOS displacement of the frame's rigid
+  plate rotation (ITRF2020-PMM, plate from the frame table, default NA) over
+  the pair, on the DISP grid (`geepers.euler.plate_velocity_enu`, rounded to
+  1 µm). `DISP − calibration` stays in IGS20; `DISP − calibration −
+  plate_motion` is plate-fixed. Group attributes: `plate`,
+  `plate_motion_model`, `pair_span_years`. +6 MB on the golden pair.
+- `cal-disp validate` compares the `plate_motion` group (with `auxiliary`
+  under `--group auxiliary`; absent from both products is a warning).
+
+### Changed
+- **[product]** `/auxiliary` `east_west`, `north_south`, `up_down` are no
+  longer a zero placeholder: they are the GNSS E/N/U displacement over the
+  pair from the UNR constant grid the calibration used (sampled with Venti and
+  the same buffer/exclusion options), with new `*_std` layers; the group
+  records `pair_span_years` (velocity = displacement / span). Variable grid:
+  zeros as before, flagged in the group description.
+
+### Golden
+`calibration` and `calibration_std` are bit-identical (`cal-disp validate
+--group main` passes against the 0.5.4 golden); `/auxiliary` changes and
+`/plate_motion` is new, so the golden needs a rebuild.
+
 ## [0.5.4] — 2026-10-22 (tag `v0.5.4` on `c3e96bb`)
 
 ### Changed

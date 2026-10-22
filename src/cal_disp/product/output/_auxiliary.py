@@ -12,6 +12,8 @@ def build_auxiliary_dataset(
     model_3d: dict[str, xr.DataArray] | None,
     model_3d_std: dict[str, xr.DataArray] | None,
     spatial_ref: xr.DataArray | None,
+    pair_span_years: float | None = None,
+    gnss_sampled: bool = True,
 ) -> xr.Dataset:
     """Build auxiliary dataset with 3D displacement components.
 
@@ -25,6 +27,12 @@ def build_auxiliary_dataset(
     spatial_ref : xr.DataArray or None
         Spatial reference data variable (CRS attributes are kept; the
         ``GeoTransform`` is set for the coarse grid).
+    pair_span_years : float or None, optional
+        Time span of the pair (secondary - reference, decimal years); recorded
+        so that velocity = displacement / span.
+    gnss_sampled : bool, optional
+        False when the components are a zero placeholder (grid types without a
+        Venti sampling path); recorded in the group attributes.
 
     Returns
     -------
@@ -36,15 +44,15 @@ def build_auxiliary_dataset(
 
     # Component descriptions
     component_descriptions = {
-        "north_south": "North-south displacement component (positive = north)",
-        "east_west": "East-west displacement component (positive = east)",
-        "up_down": "Up-down displacement component (positive = up)",
+        "north_south": "GNSS north-south displacement over the pair (positive = north)",
+        "east_west": "GNSS east-west displacement over the pair (positive = east)",
+        "up_down": "GNSS up-down displacement over the pair (positive = up)",
     }
 
     std_descriptions = {
-        "north_south_std": "Uncertainty in north-south displacement",
-        "east_west_std": "Uncertainty in east-west displacement",
-        "up_down_std": "Uncertainty in up-down displacement",
+        "north_south_std": "1-sigma uncertainty of the north-south displacement",
+        "east_west_std": "1-sigma uncertainty of the east-west displacement",
+        "up_down_std": "1-sigma uncertainty of the up-down displacement",
     }
 
     # Add 3D displacement components
@@ -91,8 +99,11 @@ def build_auxiliary_dataset(
         {
             "group_id": "auxiliary",
             "description": (
-                "3D displacement model at coarse resolution "
-                "(e.g., from GNSS grid or deformation model)"
+                "GNSS E/N/U displacement over the pair at coarse resolution: the"
+                " UNR grid the calibration used, sampled with the same options"
+                " (velocity x pair span; divide by pair_span_years for velocity)"
+                if gnss_sampled
+                else "Zero placeholder: this grid type has no GNSS sampling path"
             ),
             "units": "meters",
             "reference_frame": "ENU (East-North-Up)",
@@ -101,5 +112,7 @@ def build_auxiliary_dataset(
             "title": "Auxiliary 3D Displacement Model",
         }
     )
+    if pair_span_years is not None:
+        ds.attrs["pair_span_years"] = float(pair_span_years)
 
     return ds

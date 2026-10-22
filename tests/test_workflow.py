@@ -1072,14 +1072,23 @@ def test_gnss_buffer_reaches_the_sampler_on_the_loclin_route(
     expect_enu: bool,
 ):
     """v0.5 samples the grid with sample_gnss_enu and the gnss.buffer_meters
-    option (R-G2); the gamma route keeps its path (golden unchanged)."""
+    option (R-G2); the gamma route keeps its fit path (golden unchanged).
+
+    Both routes also sample the coarse `/auxiliary` grid; only calls on the
+    fit grid count here.
+    """
     import venti.gnss.sampling as sampling
 
-    seen = []
+    from cal_disp.workflow import AUXILIARY_STEP
+
+    with xr.open_dataset(sample_disp_product) as ds:
+        n_aux = len(ds.x.values[::AUXILIARY_STEP])
+    seen: list = []
+    aux: list = []
     real = sampling.sample_gnss_enu
 
     def spy(cfg, grid, exclude=None, defo_db_version=None):
-        seen.append(cfg)
+        (aux if len(grid[0]) == n_aux else seen).append(cfg)
         return real(cfg, grid, exclude, defo_db_version)
 
     monkeypatch.setattr(sampling, "sample_gnss_enu", spy)
@@ -1103,6 +1112,7 @@ def test_gnss_buffer_reaches_the_sampler_on_the_loclin_route(
         algorithm_parameters=params,
     )
     assert bool(seen) is expect_enu
+    assert len(aux) == 1 and aux[0].buffer_meters == 20000.0
     if expect_enu:
         assert seen[0].buffer_meters == 20000.0
         with xr.open_dataset(out) as ds:
