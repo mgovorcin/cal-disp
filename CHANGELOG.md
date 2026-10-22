@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [Unreleased]
+## [0.5.5] — release candidate `0.5.5rc1`, 2026-10-22
 
 ### Added
 - **[product]** `/plate_motion` group: LOS displacement of the frame's rigid
@@ -23,10 +23,19 @@ Product-affecting entries are marked **[product]**. Numbers on the golden pair
   records `pair_span_years` (velocity = displacement / span). Variable grid:
   zeros as before, flagged in the group description.
 
+### Fixed
+- `plate_motion` is computed after the fit from the LOS file in row windows
+  (#34): computed before the fit, it held one float32 frame through it and the
+  golden run peaked at 6.02 GB, over the 6.0 GB budget. Now 5.70 GB in
+  `cal-disp:0.5.5-rc` (0.5.4: 5.72–5.75 GB).
+
 ### Golden
-`calibration` and `calibration_std` are bit-identical (`cal-disp validate
---group main` passes against the 0.5.4 golden); `/auxiliary` changes and
-`/plate_motion` is new, so the golden needs a rebuild.
+Rebuilt in `cal-disp:0.5.5-rc` (`docs/golden/MANIFEST_0.5.5.sha256`).
+`calibration`, `calibration_std` and the identification/metadata groups pass
+against the 0.5.4 golden (`cal-disp validate --group main`); `/auxiliary`
+changes and `/plate_motion` is new (+6 MB). Reproduced in the image at 1e-6,
+peak 5.70 GB, dependency budget OK. The 0.5.4 golden is archived in
+`test_golden/archive/golden_v0.5.4_20261022/`.
 
 ## [0.5.4] — 2026-10-22 (tag `v0.5.4` on `c3e96bb`)
 
