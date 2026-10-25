@@ -67,3 +67,10 @@ changes what a run produces, so they happen together, after the VnV sign-off
 - [x] Tag `v0.5.5` on `c1f3579` (owner, 2026-10-22; first placed on `8e5e797`, before #34, and moved); image `cal-disp:0.5.5` built from the tag and validated against the golden, peak 5.77 GB, budget OK (`test_golden/validation_0.5.5_release_image.log`).
 - [ ] Push the image (owner).
 - [ ] cal-vlm-batch: rebuild the cal-disp worker image on `cal-disp:0.5.5` so Batch products carry the new layers.
+
+## 0.5.6 (2026-10-25)
+- [x] Runconfig `fit_mask_file` (#37) on Venti `f2db0cb` (venti-dev #49, #50); no value change.
+- [x] Golden unchanged: the 0.5.5 golden validates in `0.5.6-rc` on every group, peak 5.72 GB, budget OK.
+- [ ] Tag `v0.5.6` after merge (owner); build `cal-disp:0.5.6` from the tag and validate against the golden.
+- [ ] Push the image (owner).
+- [ ] cal-vlm-batch: worker on `cal-disp:0.5.6`; Gulf/East rerun with `--fit-mask-dir campaigns/gulf_east/fit_masks`.

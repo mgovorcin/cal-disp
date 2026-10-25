@@ -11,7 +11,7 @@ input, static-ancillary and golden-output file
 | Built | 2026-10-22, inside `cal-disp:0.5.5-rc` (`sha256:4d1dc8bb3ae74153a8405d04699ff59056b6af42882ffe223bcb2cac6efb022f`, version `0.5.5rc1`), with `scripts/build_golden_output.sh --skip-download` |
 | Golden product | `OPERA_L4_DISP-CAL-S1_IW_F08882_VV_20220111T002651Z_20220722T002657Z_v1.0_20261022T074815Z.nc` |
 | Change vs 0.5.4 | `calibration`, `calibration_std`, identification and metadata pass (`validate --group main`); new `/plate_motion` group (ITRF2020-PMM, NA), `/auxiliary` E/N/U filled with the GNSS displacement over the pair (+ `*_std`) instead of zeros; +6 MB |
-| Validation in the image | passed at 1e-6, peak 5.70 GB (`test_golden/validation_0.5.5.log`) |
+| Validation in the image | passed at 1e-6, peak 5.70 GB (`test_golden/validation_0.5.5.log`); unchanged for 0.5.6: validates in `cal-disp:0.5.6-rc` on every group, peak 5.72 GB (`test_golden/validation_0.5.6rc1.log`) |
 | Change vs 0.3 | `calibration` median \|Δ\| 12.2 mm (max 113 mm); `calibration_std` NaN exactly where `calibration` is (CHANGELOG) |
 | Previous golden (v0.5.4, 2026-10-22) | archived in `test_golden/archive/golden_v0.5.4_20261022/`; manifest `MANIFEST_0.5.4.sha256` |
 | v0.5.2/0.5.3 golden (2026-10-20) | archived in `test_golden/archive/golden_v0.5.2_20261020/`; manifest `MANIFEST_0.5.2.sha256` |

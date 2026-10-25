@@ -3,6 +3,28 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [0.5.6] — release candidate `0.5.6rc1`, 2026-10-25
+
+### Added
+- Runconfig `static_ancillary_group.fit_mask_file` and `cal-disp config
+  --fit-mask-file` (#37): a stable-pixel fit mask (uint8 GeoTIFF on the DISP
+  grid, 1 = may be fit, e.g. `venti-fit-mask`) that is not packaged in Venti.
+  Pixels outside it leave the loclin surface fit only, exactly like a packaged
+  `surface.fit_mask` (bit-identical for the same mask); exclusive with it and
+  loclin only. Keeps campaign masks out of Venti releases and file paths out of
+  the algorithm parameters. Evidence: SW Florida F12637, median +3.0 → +1.5
+  mm/yr, NMAD 2.8 → 0.7 (cal-vlm-batch gulf_east).
+
+### Changed
+- Venti `f2db0cb` (venti-dev #49: `calibrate_pair` accepts a caller-supplied
+  fit mask; #50: research builders off the deprecated `shapely.ops.transform`).
+  No value change.
+
+### Golden
+Unchanged: the 0.5.5 golden validates in `cal-disp:0.5.6-rc` on every group
+(no mask in its runconfig), peak 5.72 GB, budget OK
+(`test_golden/validation_0.5.6rc1.log`).
+
 ## [0.5.5] — 2026-10-22 (tag `v0.5.5` on `c1f3579`)
 
 ### Added
