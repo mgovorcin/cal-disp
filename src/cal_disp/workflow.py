@@ -748,6 +748,7 @@ def run_calibration(
     secondary_tropo_files: list[Path] | None = None,
     defo_area_db_json: Path | None = None,
     event_db_json: Path | None = None,
+    fit_mask_file: Path | None = None,
     mask_file: Path | None = None,
     block_shape: tuple[int, int] = (512, 512),  # noqa: ARG001 — TODO: Dask blocking
     n_workers: int = 4,  # noqa: ARG001 — TODO: Dask parallelisation
@@ -796,6 +797,10 @@ def run_calibration(
         GeoJSON of deformation areas to exclude from the fit.
     event_db_json : Path, optional
         GeoJSON of events to exclude from the fit (within the epoch only).
+    fit_mask_file : Path, optional
+        Stable-pixel fit mask (uint8 GeoTIFF on the DISP grid, 1 = may be fit)
+        from the runconfig, for masks not packaged in Venti; loclin only and
+        exclusive with ``surface.fit_mask``.
     mask_file : Path, optional
         Runconfig byte mask (uint8, 0 = invalid, 1 = good) on the DISP grid;
         its 0 pixels are excluded from the fit like the product's own masks.
@@ -1151,10 +1156,29 @@ def run_calibration(
             cal.posting_meters,
             pair=disp_file.name,
         )
-    # a frame's packaged stable-pixel mask (Venti surface.fit_mask, frame
-    # table): unstable pixels leave the fit but keep the surface
+    # a frame's stable-pixel mask, packaged (Venti surface.fit_mask, frame
+    # table) or from the runconfig (fit_mask_file): unstable pixels leave the
+    # fit but keep the surface
     fit_mask = None
-    if venti_options.surface.fit_mask is not None:
+    if fit_mask_file is not None:
+        if venti_options.surface.fit_mask is not None:
+            raise ValueError(
+                f"fit_mask_file {fit_mask_file} and surface.fit_mask"
+                f" {venti_options.surface.fit_mask!r} are both set; give one"
+            )
+        if venti_options.surface.method != "loclin":
+            raise ValueError(
+                "fit_mask_file needs surface.method 'loclin' (got"
+                f" {venti_options.surface.method!r})"
+            )
+        fit_mask = _read_external_mask(Path(fit_mask_file), x, y)
+        logger.info(
+            "fit_mask_file %s: %d of %d pixels outside it are left out of the fit",
+            Path(fit_mask_file).name,
+            int((~fit_mask & mask).sum()),
+            int(mask.sum()),
+        )
+    elif venti_options.surface.fit_mask is not None:
         from venti.frames import fit_mask_path
 
         fit_mask = _read_external_mask(

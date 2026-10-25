@@ -39,6 +39,7 @@ def create_config(
     algorithm_overrides_json: Path | None = None,
     defo_area_db_json: Path | None = None,
     event_db_json: Path | None = None,
+    fit_mask_file: Path | None = None,
     n_workers: int = DEFAULT_N_WORKERS,
     threads_per_worker: int = DEFAULT_THREADS_PER_WORKER,
     block_shape: tuple[int, int] = DEFAULT_BLOCK_SHAPE,
@@ -97,6 +98,9 @@ def create_config(
         GeoJSON with deforming areas to exclude from calibration.
     event_db_json : Path or None, optional
         GeoJSON with earthquake/volcanic activity events.
+    fit_mask_file : Path or None, optional
+        Stable-pixel fit mask (uint8 GeoTIFF, 1 = may be fit), written to the
+        static ancillary group. Default is None.
     n_workers : int, optional
         Number of parallel workers. Default is 4.
     threads_per_worker : int, optional
@@ -164,6 +168,7 @@ def create_config(
         "algorithm_overrides_json": algorithm_overrides_json,
         "defo_area_db_json": defo_area_db_json,
         "event_db_json": event_db_json,
+        "fit_mask_file": fit_mask_file,
     }
     for name, path in optional_files.items():  # type: ignore[assignment]
         if path is None:
@@ -221,6 +226,8 @@ def create_config(
             defo_area_db_json = defo_area_db_json.resolve()
         if event_db_json is not None:
             event_db_json = event_db_json.resolve()
+        if fit_mask_file is not None:
+            fit_mask_file = fit_mask_file.resolve()
 
         # Resolve file lists
         if ref_tropo_files is not None:
@@ -255,11 +262,12 @@ def create_config(
 
     # Only create static ancillary group if any files are provided
     static_ancillary_group = None
-    if any([algorithm_overrides_json, defo_area_db_json, event_db_json]):
+    if any([algorithm_overrides_json, defo_area_db_json, event_db_json, fit_mask_file]):
         static_ancillary_group = StaticAncillaryFileGroup(
             algorithm_parameters_overrides_json=algorithm_overrides_json,
             defo_area_db_json=defo_area_db_json,
             event_db_json=event_db_json,
+            fit_mask_file=fit_mask_file,
         )
 
     product_path_group = ProductPathGroup(
@@ -415,6 +423,11 @@ def create_config(
     help="Events database (GeoJSON).",
 )
 @click.option(
+    "--fit-mask-file",
+    type=click.Path(exists=True, path_type=Path),
+    help="Stable-pixel fit mask (uint8 GeoTIFF, 1 = may be fit; loclin only).",
+)
+@click.option(
     "--n-workers",
     "-w",
     type=int,
@@ -475,6 +488,7 @@ def config_cli(
     algorithm_overrides: Path | None,
     defo_area_db: Path | None,
     event_db: Path | None,
+    fit_mask_file: Path | None,
     n_workers: int,
     threads_per_worker: int,
     block_shape: tuple[int, int],
@@ -550,6 +564,7 @@ def config_cli(
             algorithm_overrides_json=algorithm_overrides,
             defo_area_db_json=defo_area_db,
             event_db_json=event_db,
+            fit_mask_file=fit_mask_file,
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             block_shape=block_shape,

@@ -270,6 +270,8 @@ class StaticAncillaryFileGroup(YamlModel):
         GeoJSON file with deforming areas to exclude from calibration.
     event_database_json : Optional[Path]
         GeoJSON file with earthquake/volcanic activity events for each frame.
+    fit_mask_file : Optional[Path]
+        Stable-pixel fit mask of the frame (uint8 GeoTIFF, 1 = may be fit).
 
     """
 
@@ -296,6 +298,17 @@ class StaticAncillaryFileGroup(YamlModel):
         description=(
             "GeoJSON file containing list of events (earthquakes, volcanic activity)"
             " for each frame"
+        ),
+    )
+
+    fit_mask_file: OptionalPath = Field(
+        default=None,
+        description=(
+            "Stable-pixel fit mask of the frame (uint8 GeoTIFF, 1 = may be fit,"
+            " e.g. from venti-fit-mask). Pixels outside it are left out of the"
+            " loclin surface fit only; the surface is still evaluated there. For"
+            " masks not packaged in Venti; cannot be combined with"
+            " surface.fit_mask"
         ),
     )
 
