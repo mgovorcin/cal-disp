@@ -161,6 +161,7 @@ This writes `runconfig.yaml` into the work directory (`--work-dir`). Use
 | `--algorithm-overrides` | Frame-specific parameter overrides (JSON), applied on top of `--algorithm-params`, e.g. `{"8882": {"downsample_factor": 3}}` |
 | `--defo-area-db` | Deforming areas database (GeoJSON) |
 | `--event-db` | Events database (GeoJSON) |
+| `--fit-mask-file` | Stable-pixel fit mask (uint8 GeoTIFF on the DISP grid, 1 = may be fit, e.g. from `venti-fit-mask`): pixels outside it leave the surface fit only (loclin; not with a packaged `surface.fit_mask`) |
 | `-w` / `--n-workers` | Number of parallel workers (default: 4) |
 | `-t` / `--threads-per-worker` | Threads per worker (default: 1) |
 | `--block-shape` | Processing block size in pixels (default: 512 512) |
