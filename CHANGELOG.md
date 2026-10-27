@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.6] — release candidate `0.5.6rc1`, 2026-10-25
+## [0.5.6] — 2026-10-25 (tag `v0.5.6` on `8d96246`)
 
 ### Added
 - Runconfig `static_ancillary_group.fit_mask_file` and `cal-disp config
