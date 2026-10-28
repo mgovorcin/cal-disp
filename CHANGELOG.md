@@ -3,6 +3,25 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
+## [0.5.7] — release candidate `0.5.7rc1`, 2026-10-28
+
+### Changed
+- **[product]** Venti `9537925`: frame table 0.9-draft gives
+  `surface.regions = separate` to three Gulf/East coastal frames (venti-dev
+  #51): F00834 Baltimore/DC (Chesapeake Bay), F00831 Outer Banks NC, F36008
+  Long Island Sound. Campaign validation with regions (gulf-east-v052,
+  2026-10-21): F00834 DD sill −17%, RMSE 3.53 → 3.01, median +1.37 → +0.40
+  mm/yr; F00831 RMSE 10.5 → 3.1; F36008 RMSE 10.9 → 3.1. Values change only for
+  these three frames.
+
+### Golden
+Rebuilt in `cal-disp:0.5.7-rc` (`docs/golden/MANIFEST_0.5.7.sha256`). Every data
+layer (incl. `/plate_motion` and `/auxiliary`) is bit-identical to 0.5.5; the one
+product difference is `/metadata/frame_parameters_version` (`0.8-draft` →
+`0.9-draft`). `configs/runconfig.yaml` now carries the empty optional
+`fit_mask_file` field added in 0.5.6. The 0.5.5 golden is archived in
+`test_golden/archive/golden_v0.5.5_20261022/`.
+
 ## [0.5.6] — 2026-10-25 (tag `v0.5.6` on `8d96246`)
 
 ### Added

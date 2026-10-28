@@ -74,3 +74,8 @@ changes what a run produces, so they happen together, after the VnV sign-off
 - [x] Tag `v0.5.6` on `8d96246` (owner, 2026-10-25); image `cal-disp:0.5.6` built from the tag and validated against the golden, peak 5.83 GB, budget OK (`test_golden/validation_0.5.6_release_image.log`).
 - [ ] Push the image (owner).
 - [ ] cal-vlm-batch: worker on `cal-disp:0.5.6`; Gulf/East rerun with `--fit-mask-dir campaigns/gulf_east/fit_masks`.
+
+## 0.5.7 (2026-10-28)
+- [x] Venti `9537925` (frame table 0.9-draft: regions for F00834, F00831, F36008; venti-dev #51); golden rebuilt in `0.5.7-rc` (metadata only: `frame_parameters_version`).
+- [ ] Tag `v0.5.7` after merge (owner); build `cal-disp:0.5.7` from the tag and validate against the golden.
+- [ ] Push the image (owner).
