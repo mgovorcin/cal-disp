@@ -3,7 +3,7 @@
 Product-affecting entries are marked **[product]**. Numbers on the golden pair
 (F08882, 2022-01-11 → 2022-07-22) compare against the 0.3 golden.
 
-## [0.5.7] — release candidate `0.5.7rc1`, 2026-10-28
+## [0.5.7] — 2026-10-29 (tag `v0.5.7` on `3425cb2`)
 
 ### Changed
 - **[product]** Venti `9537925`: frame table 0.9-draft gives
